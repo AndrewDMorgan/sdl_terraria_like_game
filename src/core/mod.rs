@@ -4,7 +4,7 @@ use sdl2::render::TextureCreator;
 use sdl2::surface::Surface;
 use sdl2::video::WindowContext;
 use crate::shaders::*;
-use crate::game_manger::game::Game;
+use crate::game_manager::game::Game;
 use crate::logging::{logging as logger, logging::{Logging, Log, Logs}};
 use metal::*;
 
@@ -24,7 +24,7 @@ pub fn start() -> Result<(), String> {
     let logging_level = Logging::Everything;
     
     // todo! temporary just to handle the game for now, no menues or anything
-    let mut _game = Game::new();
+    let mut game = Game::new();
 
     // Initialize SDL2
     let sdl = sdl2::init()?;
@@ -39,14 +39,14 @@ pub fn start() -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     
     // --- Create an SDL2 surface and texture ---
-    let (_device_width, _device_height) = (video.desktop_display_mode(0)?.w, video.desktop_display_mode(0)?.h);
+    let (device_width, device_height) = (video.desktop_display_mode(0)?.w, video.desktop_display_mode(0)?.h);
     let mut window_surface = window.into_canvas().build().map_err(|e| e.to_string())?;
     
     let mut event_pump = sdl.event_pump()?;
 
     // shader stuff (looks so much better when it's wrapped up in its own handler)
     let device = Device::system_default().ok_or_else(|| String::from("Failed to get system default device"))?;
-    let shaders = shader_loader::load_game_shaders(&device)?;
+    let shaders = shader_loader::load_game_shaders(&device, (device_width as u32, device_height as u32))?;
     let mut shader_handler = shader_handler::ShaderHandler::new(device, shaders);
 
     // every time a log is added it should probably be saved
@@ -62,7 +62,7 @@ pub fn start() -> Result<(), String> {
     'running: loop {
         // handling events
         timer.start_new_frame();
-        let status = event_handler.handle_events(event_pump.poll_iter());
+        let status = event_handler.handle_events(event_pump.poll_iter(), &mut Some(&mut game), &timer);
         match status {
             event_handler::Status::Continue => {},
             event_handler::Status::Quit => break 'running,
@@ -91,13 +91,21 @@ pub fn start() -> Result<(), String> {
         let elapsed_for_events = timer.elapsed_frame().as_secs_f64();
         
         let window_size = window_surface.output_size()?;
+        // should hopefully prevent segfaults from buffer overflows? Honestly, not sure how this would happen though
+        if window_size.0 > device_width as u32 || window_size.1 > device_height as u32 {
+            logs.push(Log {
+                message: format!("[Buffer Overflow Error; Fatal] Window size ({}, {}) exceeds the expected buffer size ({}, {}). Unable to continue as it will overflow the buffer.", window_size.0, window_size.1, device_width, device_height),
+            });
+            break 'running;
+        }
 
         // creating a surface to render to (this later will be converted to a texture)
         let mut render_surface = Surface::new(window_size.0, window_size.1, PixelFormatEnum::RGB24)?;
         //render_surface.fill_rect(None, sdl2::pixels::Color::RGB(225, 225, 255))?;  // clearing costs a lot.... and the gpu is already running
 
         let elapsed_for_clearing_surf = timer.elapsed_frame().as_secs_f64();
-
+        let mut elapsed_for_event_handling = 0.0;
+        
         // !====! Do Rendering Here! !====!
 
 
@@ -118,19 +126,39 @@ pub fn start() -> Result<(), String> {
                 depth: 1,
             };
             
-            // creating new buffers does incur a cost of about 150-250 microseconds, so avoid doing it alot
-            let pixels_buffer =
-                shader_handler.device.new_buffer_with_data(
-                    pixels.as_mut_ptr() as *mut _ as *mut _,
-                    (size_of::<u8>() * pixels.len()) as u64,
-                    MTLResourceOptions::StorageModeShared,
-            );
             let shader = shader_handler.get_shader(shader_handler::ShaderContext::GameLoop);
             shader.update_buffer(0, pitch as u64)?;
             shader.update_buffer(1, width as u64)?;
             shader.update_buffer(2, height as u64)?;
+
+            // getting the tilemap slice to render
+            let camera = &game.player.camera;
+            match game.get_tilemap_manager_ref().get_current_map_ref(crate::game_manager::world::tile_map::Dimension::Overworld) {
+                Some(tile_map) => {
+                    let (map, offset_transform, visible_size) = tile_map.get_render_slice(
+                        camera,
+                        (width, height)
+                    );
+                    shader.update_buffer_slice(8, &map)?;
+                    shader.update_buffer(6, visible_size.0)?;
+                    shader.update_buffer(7, visible_size.1)?;
+                    let transform = shader_handler::Float4::new(offset_transform.x, offset_transform.y, offset_transform.zoom, 0.0);
+                    shader.update_buffer(9, transform)?;
+                },
+                _ => {
+                    // if there's none, do this?
+                    shader.update_buffer_slice::<&[u32]>(8, &[])?;
+                    if matches!(logging_level, Logging::Everything | Logging::WarningOnly) {
+                        logs.push(Log {
+                            message: format!("[Render Warning] No tile map found for rendering in current dimension.")
+                        });
+                    }
+                },
+            }
+
+            shader.update_buffer_slice(16, pixels)?;
             shader.execute_with_extra_buffers(
-                &[&pixels_buffer],
+                &[],
                 grid_size,
                 threadgroup_size,
                 Some(Box::new(|| {
@@ -140,9 +168,27 @@ pub fn start() -> Result<(), String> {
                     //    technically speaking, because the gpu requires non-mutating data, even though the updating is
                     //    concurrently happening, it's using the old state of the game, so it kinda does act as render than update
                     //
+
+                    // todo! eventually move this to a better spot
+                    if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Right) {
+                        game.player.camera.x += 200.0 * timer.delta_time as f32;
+                    }
+                    if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Left) {
+                        game.player.camera.x -= 200.0 * timer.delta_time as f32;
+                    }
+                    if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Down) {
+                        game.player.camera.y += 200.0 * timer.delta_time as f32;
+                    }
+                    if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Up) {
+                        game.player.camera.y -= 200.0 * timer.delta_time as f32;
+                    }
+
+                    elapsed_for_event_handling = timer.elapsed_frame().as_secs_f64();
+
                 }))
             );
-            let out_ptr = pixels_buffer.contents() as *mut u8;
+            shader.execute(grid_size, threadgroup_size);
+            let out_ptr = shader.get_buffer_contents(16);
             let out_slice = unsafe { std::slice::from_raw_parts(out_ptr, pixels.len()) };
             pixels.copy_from_slice(out_slice);
             Ok(())
@@ -191,10 +237,11 @@ pub fn start() -> Result<(), String> {
             let t0 = elapsed_for_events;
             let t1 = elapsed_for_clearing_surf - elapsed_for_events;
             let t2 = elapsed_for_gpu_drawing - elapsed_for_clearing_surf;
+            let t6 = elapsed_for_event_handling - elapsed_for_clearing_surf;
             let t3 = elapsed_for_creating_texture - elapsed_for_gpu_drawing;
             let t4 = elapsed_for_rendering_texture - elapsed_for_creating_texture;
             let t5 = elapsed_for_presenting - elapsed_for_rendering_texture;
-            let text = format!("Frame timings (ms): Everything: {}, Events: {:.3}, Create Surface: {:.3}, GPU Draw: {:.3}, Create Texture: {:.3}, Render Texture: {:.3}, Present: {:.3}", timer.delta_time * 1000.0, t0 * 1000.0, t1 * 1000.0, t2 * 1000.0, t3 * 1000.0, t4 * 1000.0, t5 * 1000.0);
+            let text = format!("Frame timings (ms): Everything: {}, Events: {:.3}, Create Surface: {:.3}, [ GPU Draw: {:.3} ; Event Handling: {:.3} ], Create Texture: {:.3}, Render Texture: {:.3}, Present: {:.3}", timer.delta_time * 1000.0, t0 * 1000.0, t1 * 1000.0, t2 * 1000.0, t6 * 1000.0, t3 * 1000.0, t4 * 1000.0, t5 * 1000.0);
             logs.push(Log {
                 message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text)
             });

@@ -1,16 +1,19 @@
 [
   [
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 24.774790999999997, Events: 15.459, Create Surface: 0.253, GPU Draw: 5.866, Create Texture: 1.617, Render Texture: 0.004, Present: 1.575"
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 35.966542, Events: 14.517, Create Surface: 0.229, [ GPU Draw: 12.714 ; Event Handling: 0.588 ], Create Texture: 6.588, Render Texture: 0.008, Present: 1.911"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 37.965666999999996, Events: 34.448, Create Surface: 0.293, GPU Draw: 1.367, Create Texture: 1.516, Render Texture: 0.002, Present: 0.339"
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 42.273374999999994, Events: 38.434, Create Surface: 0.268, [ GPU Draw: 1.525 ; Event Handling: 0.676 ], Create Texture: 1.627, Render Texture: 0.002, Present: 0.418"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 21.704041000000007, Events: 19.320, Create Surface: 0.165, GPU Draw: 0.810, Create Texture: 1.318, Render Texture: 0.002, Present: 0.090"
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 19.999083000000002, Events: 17.579, Create Surface: 0.153, [ GPU Draw: 0.802 ; Event Handling: 0.109 ], Create Texture: 1.371, Render Texture: 0.001, Present: 0.093"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 22.871291999999986, Events: 0.023, Create Surface: 0.224, GPU Draw: 0.792, Create Texture: 1.580, Render Texture: 0.001, Present: 20.252"
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 17.333041999999963, Events: 0.031, Create Surface: 0.265, [ GPU Draw: 1.604 ; Event Handling: 0.335 ], Create Texture: 1.417, Render Texture: 0.001, Present: 14.014"
+    },
+    {
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 39.84404199999992, Events: 36.593, Create Surface: 0.148, [ GPU Draw: 1.559 ; Event Handling: 0.128 ], Create Texture: 1.456, Render Texture: 0.002, Present: 0.087"
     }
   ],
   false

@@ -15,7 +15,7 @@ this should be a problem localized only to my mac, but who knows
 */
 
 mod shaders;
-mod game_manger;
+mod game_manager;
 mod textures;
 mod logging;
 mod core;

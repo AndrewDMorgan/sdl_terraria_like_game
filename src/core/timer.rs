@@ -5,6 +5,7 @@ pub struct Timer {
     frame: u128,
     frame_start: f64,
     pub delta_time: f64,
+    accumulative_time: f64,
 }
 
 impl Timer {
@@ -15,6 +16,7 @@ impl Timer {
             frame: 0,
             frame_start: 0.0,
             delta_time: 0.0,
+            accumulative_time: 0.0,
         }
     }
 
@@ -33,6 +35,15 @@ impl Timer {
         let current_time = self.start.elapsed().as_secs_f64();
         self.delta_time = current_time - self.frame_start;
         self.frame += 1;
+
+        self.accumulative_time += self.delta_time;
+    }
+}
+
+impl Drop for Timer {
+    // todo! temporary
+    fn drop(&mut self) {
+        println!("Average runtime: {:.3} fps", 1.0 / (self.accumulative_time / self.frame as f64));
     }
 }
 

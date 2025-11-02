@@ -1,5 +1,23 @@
 use metal::{Buffer, CommandQueue, CompileOptions, ComputePipelineDescriptor, ComputePipelineState, Device, MTLResourceOptions, MTLSize};
 
+// this could be aligned with the alignment derive, but it's not needed
+// as it's already aligned by the hard coded types
+// 128 bits or 16 bytes
+// the metal float4 type has no padding between elements either
+// padding at the end doesn't really matter here (only when defining buffer sizes)
+pub struct Float4 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+impl Float4 {
+    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Float4 { x, y, z, w }
+    }
+}
+
 /// Dictates which shader should be called in which situation
 /// This should link the menue states to the shaders much easier
 /// Each different window context should ideally have its own shader to reduce complexity

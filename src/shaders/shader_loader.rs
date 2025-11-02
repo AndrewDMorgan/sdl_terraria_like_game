@@ -12,7 +12,7 @@ static TILE_SIZE: (u32, u32) = (8, 8);
 static MAX_CHARACTERS: usize = 32;
 
 /// Loads all shaders required for the game and returns them as an array
-pub fn load_game_shaders(device: &Device) -> Result<[Shader; 1], String> {
+pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32)) -> Result<[Shader; 1], String> {
     // this does have to stay up to date with the number of shaders, but
     // since all the shaders do have to be loaded, it should be fine to assume the number of shaders
     Ok([
@@ -35,6 +35,7 @@ pub fn load_game_shaders(device: &Device) -> Result<[Shader; 1], String> {
                 (size_of::<u64>() * 2 * MAX_PARTICLES) as u64, // max of 2048 particles on screen at a given time
                 size_of::<u64>() as u64, // num_texts
                 ((size_of::<u64>() * 2 + size_of::<u8>() * MAX_CHARACTERS) * MAX_TEXTS) as u64, // max of 1024 text entries on screen at a given time
+                (size_of::<u8>() as u32 * max_screen_size.0 * max_screen_size.1 * 3) as u64,
             ], "ComputeShader")?;
             
             // loading the textures
