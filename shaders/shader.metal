@@ -16,7 +16,7 @@ kernel void ComputeShader (
     constant uint&   tile_map_width    [[ buffer(6 ) ]],  // size of the tile map in tiles (width, height)
     constant uint&   tile_map_height   [[ buffer(7 ) ]],  // size of the tile map in tiles (width, height)
     constant ulong*  tile_map          [[ buffer(8 ) ]],  // tile map data (screen space, not all global tiles)
-    constant float3& camera_position   [[ buffer(9 ) ]],  // camera position (screen space offset) and rotation
+    constant float4& camera_position   [[ buffer(9 ) ]],  // camera position (screen space offset) and rotation and scale
 
     constant uint&   num_entities      [[ buffer(10) ]],  // number of entities
     constant ulong2* entity_data       [[ buffer(11) ]],  // entity data
@@ -66,12 +66,20 @@ kernel void ComputeShader (
     //        -- however, only one shader should be called each frame, so on overlapping ui like in gameplay,
     //           this shader has to do it all; sending data to and from the gpu multiple times is a terrible idea for performance
     //      I might pass in a struct with uint flags representing the ui state, or maybe parse the inventory/ui into a
-    //        less variable format that's easier to render (the performance of the ui really only comes from text)
+    //        less variable format that's easier to render (the performance of the ui really only comes from text and rendering, not state tracking or parsing)
 
     uint index = gid.y * pitch + gid.x * 3;
     
     // the color channels are between 0 and 1
-    float3 color = float3( float(gid.x) / float(width), float(gid.y) / float(height), 0.5);
+    // color = float3( float(gid.x) / float(width), float(gid.y) / float(height), 0.5);
+    float3 color = float3(
+        tile_textures[(gid.x / 6) % 8 + ((gid.y / 6) % 8) * 8 + 64 * 1].x / 255.0,
+        tile_textures[(gid.x / 6) % 8 + ((gid.y / 6) % 8) * 8 + 64 * 1].y / 255.0,
+        tile_textures[(gid.x / 6) % 8 + ((gid.y / 6) % 8) * 8 + 64 * 1].z / 255.0
+    );
+    if (!tile_textures[(gid.x / 6) % 8 + (gid.y / 6) % 8 * 8 + 64 * 1].w) {
+        color = float3(0.8, 0.8, 0.9);
+    }
     pixels[index + 0] = uchar(color.x * 255.0); // R
     pixels[index + 1] = uchar(color.y * 255.0); // G
     pixels[index + 2] = uchar(color.z * 255.0); // B

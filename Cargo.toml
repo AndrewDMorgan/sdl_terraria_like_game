@@ -8,3 +8,4 @@ sdl2 = { version = "0.38.0" }
 metal = "0.32.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+image = "0.25.8"
