@@ -2,9 +2,9 @@
 use crate::game_manager::entities::player::player::CameraTransform;
 use crate::game_manager::world::world_gen::WorldGenerator;
 
-pub static GRASS_IDS: &[u32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
-pub static DIRT_IDS: &[u32] = &[15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29];
-pub static STONE_IDS: &[u32] = &[30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44];
+pub static GRASS_IDS: &[u32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 47];
+pub static DIRT_IDS: &[u32] = &[15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 46];
+pub static STONE_IDS: &[u32] = &[30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45];
 
 pub static SOLID_TILES: &[&[u32]] = &[
     GRASS_IDS,
@@ -12,6 +12,7 @@ pub static SOLID_TILES: &[&[u32]] = &[
     STONE_IDS,
 ];
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TileMap {
     tiles: Vec<Vec<[u32; 3]>>,
     lighting: Vec<Vec<[u8; 3]>>,
@@ -31,6 +32,28 @@ impl TileMap {
 
     pub fn get_tile_mut(&mut self, x: usize, y: usize, layer: usize) -> &mut u32 {
         &mut self.tiles[y][x][layer]
+    }
+
+    pub fn check_aabb_collision(&self, x: f32, y: f32, width: f32, height: f32) -> bool {
+        let start_x = (x / 8.0).floor() as isize;
+        let start_y = (y / 8.0).floor() as isize;
+        let end_x = ((x + width) / 8.0).ceil() as isize;
+        let end_y = ((y + height) / 8.0).ceil() as isize;
+
+        for tile_y in start_y..end_y {
+            for tile_x in start_x..end_x {
+                if tile_x < 0 || tile_y < 0 || tile_y as usize >= self.get_map_height() || tile_x as usize >= self.get_map_width() {
+                    continue;
+                }
+                let tile_id = self.get_tile(tile_x as usize, tile_y as usize, 0);
+                for solid_ids in SOLID_TILES {
+                    if solid_ids.contains(&tile_id) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     pub fn get_tile(&self, x: usize, y: usize, layer: usize) -> u32 {
@@ -63,7 +86,18 @@ impl TileMap {
         let cell_offset_y = (fract(camera_transform.y / 8.) * 8.) as f32 / camera_transform.zoom;
 
         // generating the visible slice
-        let mut visible_tiles: Vec<[u64; 4]> = Vec::with_capacity((end_y - start_y) * (end_x - start_x));
+        // the 1024 * 1024 is technically the max size as mandated by the gpu buffers
+        
+        // incase the camera goes out of bounds (to avoid weird visual bugs)
+        if start_x >= end_x || start_y >= end_y {
+            return (vec![], CameraTransform {
+                x: 0.0,
+                y: 0.0,
+                zoom: camera_transform.zoom,
+            }, (0, 0));
+        }
+
+        let mut visible_tiles: Vec<[u64; 4]> = Vec::with_capacity(((end_y - start_y) * (end_x - start_x)).max(0).min(1024 * 1024));
         for y in start_y..end_y {
             for x in start_x..end_x {
                 visible_tiles.push([
@@ -93,6 +127,7 @@ fn fract(value: f32) -> f32 {
     value - value.floor()
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TileMapManager {
     tile_maps: [Option<TileMap>; Dimension::TOTAL as usize],
 }
@@ -121,6 +156,7 @@ impl TileMapManager {
 }
 
 #[repr(u32)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum Dimension {
     Overworld = 0,
     

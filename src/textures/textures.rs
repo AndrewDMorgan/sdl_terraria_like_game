@@ -11,7 +11,7 @@ impl From<TextureError> for String {
     }
 }
 
-pub fn get_texture_atlas<const TEXTURE_COUNT: usize>(path: &str, tile_size: (u32, u32), mut textures: Vec<[u32; 64]>) -> Result<Vec<[u32; 64]>, TextureError> {
+pub fn get_texture_atlas<const TEXTURE_COUNT: usize>(path: &str, tile_size: (u32, u32), mut textures: Vec<[u32; 64]>, total_textures_loaded: &mut usize) -> Result<Vec<[u32; 64]>, TextureError> {
     // read through all png files in the directory
     // load each (splicing it by the tile size)
     // for each slice, if it's not empty, add it to the textures array
@@ -52,5 +52,7 @@ pub fn get_texture_atlas<const TEXTURE_COUNT: usize>(path: &str, tile_size: (u32
                 }
             }
         }
-    } Ok(textures)
+    }
+    *total_textures_loaded = texture_index;
+    Ok(textures)
 }

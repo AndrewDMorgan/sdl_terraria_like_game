@@ -77,38 +77,64 @@ kernel void ComputeShader (
 
     // how in the world has this managed to not only work but to not segfault?
     // how is the memory actually aligned right on my first attempt???
-    float zoom_factor = 1.0 / camera_position.z;
+    float inv_zoom = camera_position.z;
     float3 color = float3(0.8, 0.8, 0.9);
+    float2 gid_f = float2(gid.x, gid.y);
     // making sure the position isn't outside the tilemap
+    float2 position_float = float2(gid.x - camera_position.x, gid.y - camera_position.y);
+    uint2 position = uint2(uint(position_float.x), uint(position_float.y));
     if (camera_position.x <= gid.x && camera_position.y <= gid.y) {
         // getting the corrected screen space position
-        float2 position_float = float2(gid.x - camera_position.x, gid.y - camera_position.y);
-        uint2 position = uint2(uint(position_float.x), uint(position_float.y));
-        float x_coord = metal::floor(float(position.x) / zoom_factor / 8.0);
-        float y_coord = metal::floor(float(position.y) / zoom_factor / 8.0);
+        float x_coord = metal::floor(position.x * inv_zoom * 0.125);  // 1 / 8
+        float y_coord = metal::floor(position.y * inv_zoom * 0.125);  // 1 / 8
         if (x_coord < tile_map_width && y_coord < tile_map_height) {
             uint tile_index = x_coord + y_coord * float(tile_map_width);
-            uint offset = (uint(float(position.x) / zoom_factor) % 8) + (uint(float(position.y) / zoom_factor) % 8) * 8;
+            uint offset = (uint(position.x * inv_zoom) % 8) + (uint(position.y * inv_zoom) % 8) * 8;
             
             // getting the lighting (fourth layer)
             ulong light_value = tile_map[tile_index * 4 + 3];
             float3 light_color = float3(
-                float((light_value >> 0 ) & 0xFF) / 255.0,
-                float((light_value >> 8 ) & 0xFF) / 255.0,
-                float((light_value >> 16) & 0xFF) / 255.0
+                ((light_value >> 0 ) & 0xFF) * 0.00392156862,
+                ((light_value >> 8 ) & 0xFF) * 0.00392156862,
+                ((light_value >> 16) & 0xFF) * 0.00392156862
             );
-
+            
             // going through the 3 layers ( the first is the forground )
             for (int i = 2; i >= 0; i--) {
-                ulong tile_value = tile_map[tile_index * 4 + i];
-                uint tile_text_index = uint(tile_value) * 64 + offset;
-                uint alpha = tile_textures[tile_text_index].w;
+                uint tile_value = tile_map[tile_index * 4 + i];
+                // casting tile_value to uint from ulong should just cut off the extra bits of info, which isn't necessary here at least for now
+                uint tile_text_index = tile_value * 64 + offset;
+                float alpha = tile_textures[tile_text_index].w * 0.00392156862;
                 color = float3(
-                    lerp(color.x, tile_textures[tile_text_index].x / 255.0 * light_color.x, alpha / 255.0),
-                    lerp(color.y, tile_textures[tile_text_index].y / 255.0 * light_color.y, alpha / 255.0),
-                    lerp(color.z, tile_textures[tile_text_index].z / 255.0 * light_color.z, alpha / 255.0)
+                    lerp(color.x, tile_textures[tile_text_index].x * 0.00392156862 * light_color.x, alpha),
+                    lerp(color.y, tile_textures[tile_text_index].y * 0.00392156862 * light_color.y, alpha),
+                    lerp(color.z, tile_textures[tile_text_index].z * 0.00392156862 * light_color.z, alpha)
                 );
             }
+        }
+    }
+    
+    // rendering entities
+    float2 half_size = float2(width, height) * 0.5;
+    int2 camera_position_corrected = int2(metal::round((gid_f.x - half_size.x) * inv_zoom), metal::round((gid_f.y - half_size.y) * inv_zoom));
+    for (uint i = 0; i < num_entities; i++) {
+        ulong2 entity = entity_data[i];
+        //uint rotation   =(entity.y >> 16) & 0xFFFF;
+        int offset_x    = short(ushort(entity.y));  // using &0xFFFF shouldn't be needed as the cast already does it implicitly
+        int offset_y    = short(ushort(entity.x >> 48));
+        //uint depth      = (entity.x >> 0 ) & 0xF;
+        if (camera_position_corrected.x >= offset_x && camera_position_corrected.x < offset_x + 8 &&
+            camera_position_corrected.y >= offset_y && camera_position_corrected.y < offset_y + 8
+        ) {
+            uint texture_id = entity.y >> 32;
+            uint index_offset = (camera_position_corrected.x - offset_x) + (camera_position_corrected.y - offset_y) * 8;
+            uchar4 texture_color = entity_textures[texture_id * 64 + index_offset];
+            float alpha = texture_color.w * 0.00392156862;
+            color = float3(
+                lerp(color.x, texture_color.x * 0.00392156862, alpha),
+                lerp(color.y, texture_color.y * 0.00392156862, alpha),
+                lerp(color.z, texture_color.z * 0.00392156862, alpha)
+            );
         }
     }
 

@@ -52,7 +52,7 @@ impl ShaderHandler {
     }
 
     pub fn execute(&self, context: ShaderContext, grid_size: MTLSize, threadgroup_size: MTLSize) {
-        self.shaders[context as usize].execute(grid_size, threadgroup_size);
+        self.shaders[context as usize].execute(grid_size, threadgroup_size, None);
     }
 
     pub fn get_shader(&mut self, context: ShaderContext) -> &mut Shader {
@@ -131,7 +131,7 @@ impl Shader {
     }
 
     /// Executes the shader with the given grid and threadgroup sizes
-    pub fn execute(&self, grid_size: MTLSize, threadgroup_size: MTLSize) {
+    pub fn execute<'a>(&self, grid_size: MTLSize, threadgroup_size: MTLSize, callback: Option<Box<dyn FnOnce() + 'a>>) {
         let command_buffer = self.command_queue.new_command_buffer();
         let encoder = command_buffer.new_compute_command_encoder();
         encoder.set_compute_pipeline_state(&self.pipeline_state);
@@ -142,39 +142,9 @@ impl Shader {
         }
 
         encoder.dispatch_threads(grid_size, threadgroup_size);
-        
-        encoder.end_encoding();
-        command_buffer.commit();
-        command_buffer.wait_until_completed();
-    }
-
-    /// Executes the shader with the given grid and threadgroup sizes, plus extra buffers
-    /// This should rarely be used, only in cases where buffer sizes may vary between uses
-    /// Creating new buffers incurs an extra performance cost which in most situations is unnecessary
-    pub fn execute_with_extra_buffers<'a>(
-        &self,
-        extra_buffers: &[&Buffer],
-        grid_size: MTLSize,
-        threadgroup_size: MTLSize,
-        callback: Option<Box<dyn FnOnce() + 'a>>,
-    ) {
-        let command_buffer = self.command_queue.new_command_buffer();
-        let encoder = command_buffer.new_compute_command_encoder();
-        encoder.set_compute_pipeline_state(&self.pipeline_state);
-
-        // attaching the buffers
-        for (i, buffer) in self.buffers.iter().enumerate() {
-            encoder.set_buffer(i as u64, Some(buffer), 0);
-        }
-        for (i, buffer) in extra_buffers.iter().enumerate() {
-            encoder.set_buffer((self.buffers.len() + i) as u64, Some(buffer), 0);
-        }
-
-        encoder.dispatch_threads(grid_size, threadgroup_size);
         encoder.end_encoding();
         command_buffer.commit();
 
-        // do any extra work here (the gpu is running, but not yet joined)
         if let Some(callback) = callback { callback(); }
 
         command_buffer.wait_until_completed();

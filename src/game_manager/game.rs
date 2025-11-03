@@ -4,6 +4,7 @@ use crate::game_manager::world::tile_map::*;
 use crate::game_manager::world::world_gen::*;
 
 /// The main game structure
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Game {
     pub player: Player,
     tile_map: TileMapManager,
@@ -23,6 +24,12 @@ impl Game {
             player: Player::new(),
             tile_map: tile_map_manager,
             world_generator: world_generator,
+        }
+    }
+
+    pub fn update_key_events(&mut self, timer: &crate::core::timer::Timer, event_handler: &crate::core::event_handling::event_handler::EventHandler) {
+        if let Some(tile_map) = self.tile_map.get_current_map(Dimension::Overworld) {
+            self.player.update_key_events(timer, event_handler, tile_map);
         }
     }
 

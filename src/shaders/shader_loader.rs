@@ -1,6 +1,6 @@
 use metal::Device;
 
-use crate::{shaders::shader_handler::Shader, textures::textures::get_texture_atlas};
+use crate::{logging::logging::{Log, Logs}, shaders::shader_handler::Shader, textures::textures::get_texture_atlas};
 
 static MAX_ENTITIES: usize = 1024;
 static MAX_PARTICLES: usize = 2048;
@@ -12,7 +12,7 @@ static TILE_SIZE: (u32, u32) = (8, 8);
 static MAX_CHARACTERS: usize = 32;
 
 /// Loads all shaders required for the game and returns them as an array
-pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32)) -> Result<[Shader; 1], String> {
+pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mut Logs) -> Result<[Shader; 1], String> {
     // this does have to stay up to date with the number of shaders, but
     // since all the shaders do have to be loaded, it should be fine to assume the number of shaders
     Ok([
@@ -39,21 +39,32 @@ pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32)) -> Result
             ], "ComputeShader")?;
             
             // loading the textures
+            let mut total_textures_loaded_entities = 0;
             shader.update_buffer_slice(3, 
                 &get_texture_atlas::<TEXTURE_COUNT>(
-                    "textures/entities/" , TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT]
+                    "textures/entities/" , TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT], &mut total_textures_loaded_entities
                 )?
             )?; // entity_textures
+            let mut total_textures_loaded_tiles = 0;
             shader.update_buffer_slice(4, 
                 &get_texture_atlas::<TEXTURE_COUNT>(
-                    "textures/tiles/"    , TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT]
+                    "textures/tiles/"    , TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT], &mut total_textures_loaded_tiles
                 )?
             )?; // tile_textures
+            let mut total_textures_loaded_particles = 0;
             shader.update_buffer_slice(5, 
                 &get_texture_atlas::<TEXTURE_COUNT>(
-                    "textures/particles/", TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT]
+                    "textures/particles/", TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT], &mut total_textures_loaded_particles
                 )?
             )?; // particle_textures
+
+            logs.push(Log { message: format!(
+                "Loaded {} entity textures, {} tile textures, and {} particle textures into the GPU.", 
+                total_textures_loaded_entities - 1, // minus 1 to account for the empty texture
+                total_textures_loaded_tiles - 1,
+                total_textures_loaded_particles - 1
+            ) });
+
             shader
         }
     ])
