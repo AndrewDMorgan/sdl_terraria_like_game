@@ -27,9 +27,13 @@ impl Game {
         }
     }
 
-    pub fn update_key_events(&mut self, timer: &crate::core::timer::Timer, event_handler: &crate::core::event_handling::event_handler::EventHandler) {
+    pub fn update_key_events(
+        &mut self, timer: &crate::core::timer::Timer,
+        event_handler: &crate::core::event_handling::event_handler::EventHandler,
+        screen_size: (u32, u32)
+    ) {
         if let Some(tile_map) = self.tile_map.get_current_map(Dimension::Overworld) {
-            self.player.update_key_events(timer, event_handler, tile_map);
+            self.player.update_key_events(timer, event_handler, tile_map, screen_size);
         }
     }
 
@@ -40,5 +44,19 @@ impl Game {
     pub fn get_tilemap_manager_ref(&self) -> &TileMapManager {
         &self.tile_map
     }
+}
+
+#[derive(Debug)]
+pub struct GameError {
+    pub message: String,
+    pub severity: Severity,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Severity {
+    Low,
+    Medium,
+    High,
+    Fatal,
 }
 

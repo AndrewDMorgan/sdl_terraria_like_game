@@ -1,5 +1,5 @@
 
 pub mod game;
-mod entities;
+pub(crate) mod entities;
 pub mod world;
 

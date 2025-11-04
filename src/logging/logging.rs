@@ -51,3 +51,9 @@ impl Logs {
     }
 }
 
+impl Drop for Logs {
+    fn drop(&mut self) {
+        if self.1 { self.save().unwrap(); }
+    }
+}
+

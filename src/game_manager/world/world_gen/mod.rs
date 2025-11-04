@@ -1,5 +1,7 @@
 use fastnoise_lite::{FastNoiseLite, NoiseType, FractalType};
 
+use crate::game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, STONE_IDS};
+
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct WorldGenerator {
@@ -27,7 +29,7 @@ impl WorldGenerator {
 
         let mut cave_noise = FastNoiseLite::new();
         cave_noise.set_seed(Some(42069));
-        cave_noise.set_noise_type(Some(NoiseType::Cellular));
+        cave_noise.set_noise_type(Some(NoiseType::ValueCubic));
         cave_noise.set_frequency(Some(0.05));
         cave_noise.set_cellular_distance_function(Some(fastnoise_lite::CellularDistanceFunction::Manhattan));
         cave_noise.set_cellular_return_type(Some(fastnoise_lite::CellularReturnType::Distance2Div));
@@ -41,7 +43,6 @@ impl WorldGenerator {
         cave_threshold_noise.set_seed(Some(9876));
         cave_threshold_noise.set_noise_type(Some(NoiseType::Perlin));
         cave_threshold_noise.set_frequency(Some(0.1));
-
         
         for x in 0..tile_map.get_map_width() {
             let dirt_depth = ((noise.get_noise_2d(x as f32, 25.0) * 0.5 + 0.5) * 10.0) as usize;
@@ -51,7 +52,7 @@ impl WorldGenerator {
                 let height = ((noise.get_noise_2d(x as f32, y as f32) * 0.5 + 0.5) * 50.0 + 100.0) as usize;
                 let cave_noise = cave_noise.get_noise_2d(x as f32, y as f32);
 
-                if cave_noise > cave_threshold_noise.get_noise_2d(x as f32, y as f32) + 0.5 {
+                if cave_noise > cave_threshold_noise.get_noise_2d(x as f32, y as f32) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
                     continue;
                 }
                 
@@ -73,7 +74,7 @@ impl WorldGenerator {
         for x in 0..tile_map.get_map_width() {
             for y in 0..tile_map.get_map_height() {
                 let tile = tile_map.get_tile(x, y, 0);
-                if [1, 29].contains(&tile) {  // grass
+                if GRASS_IDS.contains(&tile) || DIRT_IDS.contains(&tile) {  // grass
                     let tiles_outside = [
                         tile_map.get_tile(x.saturating_sub(1), y, 0),
                         tile_map.get_tile((x + 1).min(tile_map.get_map_width() - 1), y, 0),
@@ -113,7 +114,7 @@ impl WorldGenerator {
                 }
 
 
-                if tile == 44 {  // stone
+                if STONE_IDS.contains(&tile) {  // stone
                     let tiles_outside = [
                         tile_map.get_tile(x.saturating_sub(1), y, 0),
                         tile_map.get_tile((x + 1).min(tile_map.get_map_width() - 1), y, 0),
@@ -151,6 +152,92 @@ impl WorldGenerator {
                     };
                     *tile_map.get_tile_mut(x, y, 0) = new_tile;
                 }
+            }
+        }
+
+        // trying to generate trees and bushes in flat sections
+        // todo! make a much better system for predefined structures or multi-block objects
+        for x in 4..tile_map.get_map_width() - 4 {
+            let tree_chance = x % 25;
+            if tree_chance != 10 && tree_chance != 20 { continue; }
+            // locating the top top surface
+            for y in 4..tile_map.get_map_height() - 4 {
+                let tile = tile_map.get_tile(x, y, 0);
+                if tile == 1 {
+                    if tree_chance == 10 {
+                        // bush
+                        // clear to left and right is required
+                        let left_tile = tile_map.get_tile(x.saturating_sub(1), y, 0);
+                        let right_tile = tile_map.get_tile((x + 1).min(tile_map.get_map_width() - 1), y, 0);
+                        if left_tile != 1 || right_tile != 1 { break; }
+                        // + 48
+                        // _  25 26 27
+                        // 30 31 32 33
+                        // 36 37 38 39
+                        *tile_map.get_tile_mut(x + 0, y - 2, 1) = 25 + 48;
+                        *tile_map.get_tile_mut(x + 1, y - 2, 1) = 26 + 48;
+                        *tile_map.get_tile_mut(x + 2, y - 2, 1) = 27 + 48;
+
+                        *tile_map.get_tile_mut(x - 1, y - 1, 1) = 30 + 48;
+                        *tile_map.get_tile_mut(x + 0, y - 1, 1) = 31 + 48;
+                        *tile_map.get_tile_mut(x + 1, y - 1, 1) = 32 + 48;
+                        *tile_map.get_tile_mut(x + 2, y - 1, 1) = 33 + 48;
+
+                        *tile_map.get_tile_mut(x - 1, y, 1) = 36 + 48;
+                        *tile_map.get_tile_mut(x + 0, y, 1) = 37 + 48;
+                        *tile_map.get_tile_mut(x + 1, y, 1) = 38 + 48;
+                        *tile_map.get_tile_mut(x + 2, y, 1) = 39 + 48;
+                    } else {
+                        // tree + 48
+                        // _  0  1  2  3
+                        // 4  5  6  7  8
+                        // 9  10 11 12 13
+                        // _  14 15 16 17
+                        // _  18 19 20 _
+                        // _  21 22 23 _
+                        // _  _  24 _  _
+                        // _  _  28 29 _
+                        // _  _  34 35 _
+                        *tile_map.get_tile_mut(x - 1, y - 8, 1) = 48 + 0;
+                        *tile_map.get_tile_mut(x + 0, y - 8, 1) = 48 + 1;
+                        *tile_map.get_tile_mut(x + 1, y - 8, 1) = 48 + 2;
+                        *tile_map.get_tile_mut(x + 2, y - 8, 1) = 48 + 3;
+
+                        *tile_map.get_tile_mut(x - 2, y - 7, 1) = 48 + 4;
+                        *tile_map.get_tile_mut(x - 1, y - 7, 1) = 48 + 5;
+                        *tile_map.get_tile_mut(x + 0, y - 7, 1) = 48 + 6;
+                        *tile_map.get_tile_mut(x + 1, y - 7, 1) = 48 + 7;
+                        *tile_map.get_tile_mut(x + 2, y - 7, 1) = 48 + 8;
+
+                        *tile_map.get_tile_mut(x - 2, y - 6, 1) = 48 + 9;
+                        *tile_map.get_tile_mut(x - 1, y - 6, 1) = 48 + 10;
+                        *tile_map.get_tile_mut(x + 0, y - 6, 1) = 48 + 11;
+                        *tile_map.get_tile_mut(x + 1, y - 6, 1) = 48 + 12;
+                        *tile_map.get_tile_mut(x + 2, y - 6, 1) = 48 + 13;
+
+                        *tile_map.get_tile_mut(x - 1, y - 5, 1) = 48 + 14;
+                        *tile_map.get_tile_mut(x + 0, y - 5, 1) = 48 + 15;
+                        *tile_map.get_tile_mut(x + 1, y - 5, 1) = 48 + 16;
+                        *tile_map.get_tile_mut(x + 2, y - 5, 1) = 48 + 17;
+
+                        *tile_map.get_tile_mut(x - 1, y - 4, 1) = 48 + 18;
+                        *tile_map.get_tile_mut(x + 0, y - 4, 1) = 48 + 19;
+                        *tile_map.get_tile_mut(x + 1, y - 4, 1) = 48 + 20;
+
+                        *tile_map.get_tile_mut(x - 1, y - 3, 1) = 48 + 21;
+                        *tile_map.get_tile_mut(x + 0, y - 3, 1) = 48 + 22;
+                        *tile_map.get_tile_mut(x + 1, y - 3, 1) = 48 + 23;
+
+                        *tile_map.get_tile_mut(x + 0, y - 2, 1) = 48 + 24;
+
+                        *tile_map.get_tile_mut(x + 0, y - 1, 1) = 48 + 28;
+                        *tile_map.get_tile_mut(x + 1, y - 1, 1) = 48 + 29;
+
+                        *tile_map.get_tile_mut(x + 0, y - 0, 1) = 48 + 34;
+                        *tile_map.get_tile_mut(x + 1, y - 0, 1) = 48 + 35;
+                    }
+                }
+                if tile != 0 { break; }
             }
         }
 

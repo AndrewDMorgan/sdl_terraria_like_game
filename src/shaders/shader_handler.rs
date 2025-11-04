@@ -51,8 +51,8 @@ impl ShaderHandler {
         }
     }
 
-    pub fn execute(&self, context: ShaderContext, grid_size: MTLSize, threadgroup_size: MTLSize) {
-        self.shaders[context as usize].execute(grid_size, threadgroup_size, None);
+    pub fn execute<T>(&self, context: ShaderContext, grid_size: MTLSize, threadgroup_size: MTLSize) -> Result<(), T> {
+        self.shaders[context as usize].execute(grid_size, threadgroup_size, None)
     }
 
     pub fn get_shader(&mut self, context: ShaderContext) -> &mut Shader {
@@ -131,7 +131,7 @@ impl Shader {
     }
 
     /// Executes the shader with the given grid and threadgroup sizes
-    pub fn execute<'a>(&self, grid_size: MTLSize, threadgroup_size: MTLSize, callback: Option<Box<dyn FnOnce() + 'a>>) {
+    pub fn execute<'a, T>(&self, grid_size: MTLSize, threadgroup_size: MTLSize, callback: Option<Box<dyn FnOnce() -> Result<(), T> + 'a>>) -> Result<(), T> {
         let command_buffer = self.command_queue.new_command_buffer();
         let encoder = command_buffer.new_compute_command_encoder();
         encoder.set_compute_pipeline_state(&self.pipeline_state);
@@ -145,9 +145,13 @@ impl Shader {
         encoder.end_encoding();
         command_buffer.commit();
 
-        if let Some(callback) = callback { callback(); }
+        let result = {
+            if let Some(callback) = callback { callback() }
+            else { Ok(()) }
+        };
 
         command_buffer.wait_until_completed();
+        result
     }
 
     /// Gets a mutable pointer to the contents of the specified buffer

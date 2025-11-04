@@ -116,18 +116,18 @@ kernel void ComputeShader (
     
     // rendering entities
     float2 half_size = float2(width, height) * 0.5;
-    int2 camera_position_corrected = int2(metal::round((gid_f.x - half_size.x) * inv_zoom), metal::round((gid_f.y - half_size.y) * inv_zoom));
+    float2 camera_position_corrected = float2(metal::round((gid_f.x - half_size.x) * inv_zoom * 8.0) * 0.125, metal::round((gid_f.y - half_size.y) * inv_zoom * 8.0) * 0.125);
     for (uint i = 0; i < num_entities; i++) {
         ulong2 entity = entity_data[i];
         //uint rotation   =(entity.y >> 16) & 0xFFFF;
-        int offset_x    = short(ushort(entity.y));  // using &0xFFFF shouldn't be needed as the cast already does it implicitly
-        int offset_y    = short(ushort(entity.x >> 48));
+        float offset_x    = float(short(ushort(entity.y))) * 0.01;  // using &0xFFFF shouldn't be needed as the cast already does it implicitly
+        float offset_y    = float(short(ushort(entity.x >> 48))) * 0.01;
         //uint depth      = (entity.x >> 0 ) & 0xF;
-        if (camera_position_corrected.x >= offset_x && camera_position_corrected.x < offset_x + 8 &&
-            camera_position_corrected.y >= offset_y && camera_position_corrected.y < offset_y + 8
+        if (camera_position_corrected.x >= offset_x && camera_position_corrected.x < offset_x + 8.0 &&
+            camera_position_corrected.y >= offset_y && camera_position_corrected.y < offset_y + 8.0
         ) {
             uint texture_id = entity.y >> 32;
-            uint index_offset = (camera_position_corrected.x - offset_x) + (camera_position_corrected.y - offset_y) * 8;
+            uint index_offset = uint(camera_position_corrected.x - offset_x) + uint(camera_position_corrected.y - offset_y) * 8;
             uchar4 texture_color = entity_textures[texture_id * 64 + index_offset];
             float alpha = texture_color.w * 0.00392156862;
             color = float3(

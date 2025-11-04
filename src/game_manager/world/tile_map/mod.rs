@@ -57,6 +57,7 @@ impl TileMap {
     }
 
     pub fn get_tile(&self, x: usize, y: usize, layer: usize) -> u32 {
+        if y >= self.get_map_height() || x >= self.get_map_width() { return 0; }
         self.tiles[y][x][layer]
     }
 
@@ -70,6 +71,131 @@ impl TileMap {
 
     pub fn get_light_mut(&mut self, x: usize, y: usize) -> &mut [u8; 3] {
         &mut self.lighting[y][x]
+    }
+
+    pub fn change_tile(&mut self, tile_x: usize, tile_y: usize, layer: usize, new_tile: u32) {
+        *self.get_tile_mut(tile_x, tile_y, layer) = new_tile;
+        // updating the surrounding tiles (really ugly.... but works)
+        for (x, y) in [(tile_x.saturating_sub(1), tile_y), (tile_x + 1, tile_y), (tile_x, tile_y.saturating_sub(1)), (tile_x, tile_y + 1)] {
+            if x >= self.get_map_width() || tile_y >= self.get_map_height() { continue; }
+            let tile = self.get_tile(x, y, layer);
+            if GRASS_IDS.contains(&tile) {  // grass
+                let tiles_outside = [
+                    self.get_tile(x.saturating_sub(1), y, layer),
+                    self.get_tile((x + 1).min(self.get_map_width() - 1), y, layer),
+                    self.get_tile(x, y.saturating_sub(1), layer),
+                    self.get_tile(x, (y + 1).min(self.get_map_height() - 1), layer),
+                ];
+                let tile_edges = [
+                    tiles_outside[0] == 0,
+                    tiles_outside[1] == 0,
+                    tiles_outside[2] == 0,
+                    tiles_outside[3] == 0,
+                ];
+                // left right up down
+                let new_tile = match tile_edges {
+                    [true, false, false, false] => 7,  // empty to left (wall facing to left)
+                    [false, true, false, false] => 8,  // empty to right (wall facing to right)
+                    [true, true, false, false]  => 10,  // empty to left and right (column)
+                    [false, false, true, false] => 1,  // empty above (normal)
+                    [false, false, false, true] => 47,  // empty below (upsidedown of normal)
+                    [false, false, true, true]  => 5,  // empty above and below (ceiling ig)
+
+                    [true, false, true, false]  => 2,  // empty to left and above (corner)
+                    [true, false, false, true]  => 4,  // empty to left and below (corner)
+                    [true, false, true, true]   => 13,  // empty to left above and below (cap facing left)
+
+                    [false, true, false, true]  => 9,  // empty to right and below (corner)
+                    [false, true, true, false]  => 3,  // empty to right and above (corner)
+                    [false, true, true, true]   => 6,  // empty to right above and below (cap facing right)
+
+                    [true, true, true, false]   => 11,  // empty to left, right and above (cap facing up)
+                    [true, true, false, true]   => 12,  // empty to left, right and below (cap facing down)
+                    [true, true, true, true]    => 14,  // surrounded
+
+                    _ => 29,  // dirt
+                };
+                *self.get_tile_mut(x, y, layer) = new_tile;
+            }
+
+            if DIRT_IDS.contains(&tile) {  // dirt
+                let tiles_outside = [
+                    self.get_tile(x.saturating_sub(1), y, layer),
+                    self.get_tile((x + 1).min(self.get_map_width() - 1), y, layer),
+                    self.get_tile(x, y.saturating_sub(1), layer),
+                    self.get_tile(x, (y + 1).min(self.get_map_height() - 1), layer),
+                ];
+                let tile_edges = [
+                    tiles_outside[0] == 0,
+                    tiles_outside[1] == 0,
+                    tiles_outside[2] == 0,
+                    tiles_outside[3] == 0,
+                ];
+                // left right up down
+                let new_tile = match tile_edges {
+                    [true, false, false, false] => 7  + 14,  // empty to left (wall facing to left)
+                    [false, true, false, false] => 8  + 14,  // empty to right (wall facing to right)
+                    [true, true, false, false]  => 10 + 14,  // empty to left and right (column)
+                    [false, false, true, false] => 1  + 14,  // empty above (normal)
+                    [false, false, false, true] => 46,       // empty below (upsidedown of normal)
+                    [false, false, true, true]  => 5  + 14,  // empty above and below (ceiling ig)
+
+                    [true, false, true, false]  => 2  + 14,  // empty to left and above (corner)
+                    [true, false, false, true]  => 4  + 14,  // empty to left and below (corner)
+                    [true, false, true, true]   => 13 + 14,  // empty to left above and below (cap facing left)
+
+                    [false, true, false, true]  => 9  + 14,  // empty to right and below (corner)
+                    [false, true, true, false]  => 3  + 14,  // empty to right and above (corner)
+                    [false, true, true, true]   => 6  + 14,  // empty to right above and below (cap facing right)
+
+                    [true, true, true, false]   => 11 + 14,  // empty to left, right and above (cap facing up)
+                    [true, true, false, true]   => 12 + 14,  // empty to left, right and below (cap facing down)
+                    [true, true, true, true]    => 14 + 14,  // surrounded
+
+                    _ => 29,  // stone
+                };
+                *self.get_tile_mut(x, y, layer) = new_tile;
+            }
+
+            if STONE_IDS.contains(&tile) {  // stone
+                let tiles_outside = [
+                    self.get_tile(x.saturating_sub(1), y, layer),
+                    self.get_tile((x + 1).min(self.get_map_width() - 1), y, layer),
+                    self.get_tile(x, y.saturating_sub(1), layer),
+                    self.get_tile(x, (y + 1).min(self.get_map_height() - 1), layer),
+                ];
+                let tile_edges = [
+                    tiles_outside[0] == 0,
+                    tiles_outside[1] == 0,
+                    tiles_outside[2] == 0,
+                    tiles_outside[3] == 0,
+                ];
+                // left right up down
+                let new_tile = match tile_edges {
+                    [true, false, false, false] => 7 + 29,  // empty to left (wall facing to left)
+                    [false, true, false, false] => 8 + 29,  // empty to right (wall facing to right)
+                    [true, true, false, false]  => 10 + 29,  // empty to left and right (column)
+                    [false, false, true, false] => 1 + 29,  // empty above (normal)
+                    [false, false, false, true] => 45,  // empty below (upsidedown of normal)
+                    [false, false, true, true]  => 5 + 29,  // empty above and below (ceiling ig)
+
+                    [true, false, true, false]  => 2 + 29,  // empty to left and above (corner)
+                    [true, false, false, true]  => 4 + 29,  // empty to left and below (corner)
+                    [true, false, true, true]   => 13 + 29,  // empty to left above and below (cap facing left)
+
+                    [false, true, false, true]  => 9 + 29,  // empty to right and below (corner)
+                    [false, true, true, false]  => 3 + 29,  // empty to right and above (corner)
+                    [false, true, true, true]   => 6 + 29,  // empty to right above and below (cap facing right)
+
+                    [true, true, true, false]   => 11 + 29,  // empty to left, right and above (cap facing up)
+                    [true, true, false, true]   => 12 + 29,  // empty to left, right and below (cap facing down)
+                    [true, true, true, true]    => 14 + 29,  // surrounded
+                    
+                    _ => 44,  // stone
+                };
+                *self.get_tile_mut(x, y, layer) = new_tile;
+            }
+        }
     }
 
     pub fn get_render_slice(&self, camera_transform: &CameraTransform, window_size: (u32, u32)) -> (Vec<[u64; 4]>, CameraTransform, (u32, u32)) {

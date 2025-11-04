@@ -6,7 +6,7 @@ use metal::*;
 
 use crate::logging::{logging as logger, logging::{Logging, Log, Logs}};
 use crate::shaders::shader_handler::ShaderError;
-use crate::game_manager::game::Game;
+use crate::game_manager::game::{Game, GameError, Severity};
 
 use crate::core::event_handling::*;
 pub(crate) mod event_handling;
@@ -19,7 +19,7 @@ static WINDOW_START_WIDTH: u32 = 1200;
 /// The starting height of the application window
 static WINDOW_START_HEIGHT: u32 = 750;
 
-pub fn start() -> Result<(), String> {
+pub fn start(logs: &mut Logs) -> Result<(), String> {
     let logging_level = Logging::Everything;
     
     // todo! temporary just to handle the game for now, no menues or anything
@@ -51,13 +51,11 @@ pub fn start() -> Result<(), String> {
 
     let mut event_pump = sdl.event_pump()?;
 
-    let mut logs = Logs(Vec::new(), false);
-
     // shader stuff (looks so much better when it's wrapped up in its own handler)
     let device = Device::system_default().ok_or_else(|| String::from("Failed to get system default device"))?;
-    let shaders = shader_loader::load_game_shaders(&device, (device_width as u32, device_height as u32), &mut logs)?;
+    let shaders = shader_loader::load_game_shaders(&device, (device_width as u32, device_height as u32), logs)?;
     let mut shader_handler = shader_handler::ShaderHandler::new(device, shaders);
-
+    
     // for event stuff
     let mut event_handler = event_handler::EventHandler::new();
 
@@ -68,7 +66,7 @@ pub fn start() -> Result<(), String> {
     'running: loop {
         // handling events
         timer.start_new_frame();
-        let status = event_handler.handle_events(event_pump.poll_iter(), &mut Some(&mut game), &timer);
+        let status = event_handler.handle_events(&mut event_pump, &mut Some(&mut game), &timer);
         match status {
             event_handler::Status::Continue => {},
             event_handler::Status::Quit => break 'running,
@@ -121,6 +119,7 @@ pub fn start() -> Result<(), String> {
         // the gpu is fast, but data moves between the gpu and cpu slowly
         let mut elapsed_for_event_handling = 0.0;
         let mut start_of_event_handling = 0.0;
+        let mut updating_error: Result<(), GameError> = Ok(());
         let buffer_result: Result<(), ShaderError> = surface_texture.with_lock(None, |pixels, pitch| {
             let grid_size = MTLSize {
                 width: window_size.0 as NSUInteger,
@@ -176,7 +175,7 @@ pub fn start() -> Result<(), String> {
             }
 
             shader.update_buffer_slice(16, pixels)?;
-            shader.execute(
+            updating_error = shader.execute(
                 grid_size,
                 threadgroup_size,
                 Some(Box::new(|| {
@@ -186,11 +185,10 @@ pub fn start() -> Result<(), String> {
                     // this is a slightly odd setup for me; usually I update entities than render, not render than update
                     //    technically speaking, because the gpu requires non-mutating data, even though the updating is
                     //    concurrently happening, it's using the old state of the game, so it kinda does act as render than update
-                    //
-                    game.update_key_events(&timer, &event_handler);
+                    game.update_key_events(&timer, &event_handler, window_size);
 
                     elapsed_for_event_handling = timer.elapsed_frame().as_secs_f64();
-
+                    Ok(())
                 }))
             );
             let out_ptr = shader.get_buffer_contents(16);
@@ -206,6 +204,17 @@ pub fn start() -> Result<(), String> {
                         message: format!("[Shader Error] Failed to render frame:\n{:?}", e),
                     });
                     break 'running;
+                }
+            }
+        }
+        match updating_error {
+            Ok(_) => {},
+            Err(e) => {
+                if matches!(logging_level, Logging::Everything | Logging::ErrorOnly | Logging::WarningOnly) {
+                    logs.push(Log {
+                        message: format!("[Game Update Error] Failed to update game state during frame render:\n{:?}", e),
+                    });
+                    if e.severity == Severity::Fatal { break 'running; }
                 }
             }
         }

@@ -14,13 +14,24 @@ this should be a problem localized only to my mac, but who knows
 
 */
 
+use crate::logging::logging::{Log, Logs};
+
 mod shaders;
 mod game_manager;
 mod textures;
 mod logging;
 mod core;
+mod utill;
 
-fn main() -> Result<(), String> {
-    core::start()
+fn main() {
+    let mut logs = Logs(Vec::new(), false);
+
+    let result = core::start(&mut logs);
+    match result {
+        Ok(_) => {},
+        Err(e) => {
+            logs.push(Log { message: format!("Fatal Error: {}", e) });
+        }
+    }
 }
 
