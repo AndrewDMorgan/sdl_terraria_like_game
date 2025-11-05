@@ -4,9 +4,10 @@ use sdl2::video::WindowContext;
 use sdl2::rect::Rect;
 use metal::*;
 
+use crate::logging::logging::LoggingError;
 use crate::logging::{logging as logger, logging::{Logging, Log, Logs}};
-use crate::shaders::shader_handler::ShaderError;
 use crate::game_manager::game::{Game, GameError, Severity};
+use crate::shaders::shader_handler::{ShaderError, Tuple};
 
 use crate::core::event_handling::*;
 pub(crate) mod event_handling;
@@ -39,7 +40,10 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     
     // --- Create an SDL2 surface and texture ---
     let (device_width, device_height) = (video.desktop_display_mode(0)?.w, video.desktop_display_mode(0)?.h);
-    let mut window_surface = window.into_canvas().build().map_err(|e| e.to_string())?;
+    let mut window_surface = window
+        .into_canvas()
+        .build()
+        .map_err(|e| e.to_string())?;
     
     // creating the texture that all runtime drawing will be done to
     // this texture will than be uploaded onto the window_surface
@@ -52,7 +56,8 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     let mut event_pump = sdl.event_pump()?;
 
     // shader stuff (looks so much better when it's wrapped up in its own handler)
-    let device = Device::system_default().ok_or_else(|| String::from("Failed to get system default device"))?;
+    let device = Device::system_default()
+        .ok_or_else(|| String::from("Failed to get system default device"))?;
     let shaders = shader_loader::load_game_shaders(&device, (device_width as u32, device_height as u32), logs)?;
     let mut shader_handler = shader_handler::ShaderHandler::new(device, shaders);
     
@@ -86,6 +91,10 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                             75..u8::MAX => "Serious",
                             u8::MAX => "Fatal",
                         }, msg),
+                        level: match severity {
+                            0..15 => LoggingError::Warning,
+                            _ => LoggingError::Error,
+                        },
                     });
                     if severity == u8::MAX {  break 'running;  }
                 }
@@ -107,6 +116,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         if window_size.0 > device_width as u32 || window_size.1 > device_height as u32 {
             logs.push(Log {
                 message: format!("[Buffer Overflow Error; Fatal] Window size ({}, {}) exceeds the expected buffer size ({}, {}). Unable to continue as it will overflow the buffer.", window_size.0, window_size.1, device_width, device_height),
+                level: LoggingError::Error,
             });
             break 'running;
         }
@@ -139,7 +149,11 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
 
             let mut entities: Vec<Vec<(u32, u16, i16, i16, u16, u32)>> = vec![];
             entities.push(game.player.get_model());
-            let entities = entities.concat().iter().map(|(texture_id, rot, offset_x, offset_y, _padding, depth)| {
+            let entities = entities
+                .concat()
+                .iter()
+                .map(|(texture_id, rot, offset_x, offset_y, _padding, depth)|
+            {
                 ((*texture_id as u128) << 96) |
                 ((*rot as u128) << 80) |
                 ((offset_x.cast_unsigned() as u128) << 64) |
@@ -148,6 +162,46 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             }).collect::<Vec<u128>>();
             shader.update_buffer(10, entities.len() as u32)?;
             shader.update_buffer_slice(11, &entities)?;
+            /*
+            constant uint&   num_texts         [[ buffer(14) ]],  // number of text entries
+            constant Text*   text_buffer       [[ buffer(15) ]],  // text data
+            text buffer for rendering text is a 128 bit value and a buffer of 32 u8:
+            //        16 -> x offset (screen space; top left of text, uint)
+            //        16 -> y offset (screen space; top left of text, uint)
+            //        16 -> rotation
+            //        32 -> color (r, g, b each being 8, 8, 8, 8 for alpha)
+            //        32 -> applicable data (not sure what would go here yet, but it's reserved anyways, so use if needed)
+            //        8 bits for font size
+            //        8 bits for the length of the character buffer
+            */
+            let text_buffer = vec![
+                Tuple {
+                    first:
+                        100u128 << 112 |  // x offset
+                        90u128  << 96  |  // y offset
+                        (((190u32 << 16) as u128) << 48) |  // color
+                        16u128  << 8   |  // font size
+                        12u128,  // buffer size
+                    second: {
+                        let mut text = [0u8; 32];
+                        text[0 ] = 'H' as u8;
+                        text[1 ] = 'e' as u8;
+                        text[2 ] = 'l' as u8;
+                        text[3 ] = 'l' as u8;
+                        text[4 ] = 'o' as u8;
+                        text[5 ] = ' ' as u8;
+                        text[6 ] = 'W' as u8;
+                        text[7 ] = 'o' as u8;
+                        text[8 ] = 'r' as u8;
+                        text[9 ] = 'l' as u8;
+                        text[10] = 'd' as u8;
+                        text[11] = '!' as u8;
+                        text
+                    },
+                }
+            ];
+            shader.update_buffer(14, text_buffer.len() as u32)?;
+            shader.update_buffer_slice(15, &text_buffer)?;
 
             // getting the tilemap slice to render
             let camera = &game.player.camera;
@@ -168,13 +222,14 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                     shader.update_buffer_slice::<&[u32]>(8, &[])?;
                     if matches!(logging_level, Logging::Everything | Logging::WarningOnly) {
                         logs.push(Log {
-                            message: format!("[Render Warning] No tile map found for rendering in current dimension.")
+                            message: format!("[Render Warning] No tile map found for rendering in current dimension."),
+                            level: LoggingError::Warning,
                         });
                     }
                 },
             }
 
-            shader.update_buffer_slice(16, pixels)?;
+            shader.update_buffer_slice(18, pixels)?;
             updating_error = shader.execute(
                 grid_size,
                 threadgroup_size,
@@ -191,7 +246,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                     Ok(())
                 }))
             );
-            let out_ptr = shader.get_buffer_contents(16);
+            let out_ptr = shader.get_buffer_contents(18);
             let out_slice = unsafe { std::slice::from_raw_parts(out_ptr, pixels.len()) };
             pixels.copy_from_slice(out_slice);
             Ok(())
@@ -202,6 +257,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 if matches!(logging_level, Logging::Everything | Logging::ErrorOnly | Logging::WarningOnly) {
                     logs.push(Log {
                         message: format!("[Shader Error] Failed to render frame:\n{:?}", e),
+                        level: LoggingError::Error,
                     });
                     break 'running;
                 }
@@ -213,6 +269,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 if matches!(logging_level, Logging::Everything | Logging::ErrorOnly | Logging::WarningOnly) {
                     logs.push(Log {
                         message: format!("[Game Update Error] Failed to update game state during frame render:\n{:?}", e),
+                        level: LoggingError::Error,
                     });
                     if e.severity == Severity::Fatal { break 'running; }
                 }
@@ -240,15 +297,14 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         // logging slow frames (debug purposes ig)
         if matches!(logging_level, Logging::Everything | Logging::PerformanceOnly) && timer.delta_time > logger::PERFORMANCE_LOG_THRESHOLD {
             let t0 = elapsed_for_events;
-            //let t1 = elapsed_for_clearing_surf - elapsed_for_events;
             let t2 = elapsed_for_gpu_drawing - elapsed_for_events;
             let t6 = elapsed_for_event_handling - start_of_event_handling;
-            //let t3 = elapsed_for_creating_texture - elapsed_for_gpu_drawing;
             let t4 = elapsed_for_rendering_texture - elapsed_for_events;
             let t5 = elapsed_for_presenting - elapsed_for_rendering_texture;
             let text = format!("Frame timings (ms): Everything: {:.3}, Events: {:.3}, [ GPU Draw: {:.3} ; Event Handling: {:.3} ], Render Texture: {:.3}, Present: {:.3}", timer.delta_time * 1000.0, t0 * 1000.0, t2 * 1000.0, t6 * 1000.0, t4 * 1000.0, t5 * 1000.0);
             logs.push(Log {
-                message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text)
+                message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text),
+                level: LoggingError::Warning,
             });
         }
 

@@ -1,6 +1,6 @@
 use metal::Device;
 
-use crate::{logging::logging::{Log, Logs}, shaders::shader_handler::Shader, textures::textures::get_texture_atlas};
+use crate::{logging::logging::{Log, LoggingError, Logs}, shaders::shader_handler::Shader, textures::textures::{get_font_atlas, get_texture_atlas}};
 
 static MAX_ENTITIES: usize = 1024;
 static MAX_PARTICLES: usize = 2048;
@@ -35,6 +35,8 @@ pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mu
                 (size_of::<u64>() * 2 * MAX_PARTICLES) as u64, // max of 2048 particles on screen at a given time
                 size_of::<u64>() as u64, // num_texts
                 ((size_of::<u64>() * 2 + size_of::<u8>() * MAX_CHARACTERS) * MAX_TEXTS) as u64, // max of 1024 text entries on screen at a given time
+                (size_of::<bool>() * 64 * u8::MAX as usize) as u64,
+                size_of::<u32>() as u64, // default_font_size
                 (size_of::<u8>() as u32 * max_screen_size.0 * max_screen_size.1 * 3) as u64,
             ], "ComputeShader")?;
             
@@ -58,12 +60,17 @@ pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mu
                 )?
             )?; // particle_textures
 
+            // the font size is 8 in this case
+            let font_atlas = get_font_atlas::<8, 64>("textures/fonts/default_font.png")?;
+            shader.update_buffer_slice(16, &font_atlas)?;
+            shader.update_buffer(17, 8)?;
+
             logs.push(Log { message: format!(
                 "Loaded {} entity textures, {} tile textures, and {} particle textures into the GPU.", 
                 total_textures_loaded_entities - 1, // minus 1 to account for the empty texture
                 total_textures_loaded_tiles - 1,
                 total_textures_loaded_particles - 1
-            ) });
+            ), level: LoggingError::Info });
 
             shader
         }

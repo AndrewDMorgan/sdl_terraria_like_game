@@ -56,3 +56,23 @@ pub fn get_texture_atlas<const TEXTURE_COUNT: usize>(path: &str, tile_size: (u32
     *total_textures_loaded = texture_index;
     Ok(textures)
 }
+
+pub fn get_font_atlas<const FONT_SIZE: u32, const FONT_SIZE_SQUARE: usize>(path: &str) -> Result<Vec<[bool; FONT_SIZE_SQUARE]>, TextureError> {
+    let mut atlas = vec![];
+    let img = image::open(path)
+        .map_err(|e| TextureError { details: format!("Failed to open texture image '{}': {}", path, e) })?
+        .to_rgba8();
+    let (img_width, _img_height) = img.dimensions();
+    for texture in 0..img_width / FONT_SIZE {
+        let mut char_data = [false; FONT_SIZE_SQUARE];
+        for y in 0..FONT_SIZE {
+            for x in 0..FONT_SIZE {
+                let pixel = img.get_pixel(texture * FONT_SIZE as u32 + x, y);
+                char_data[(y * FONT_SIZE + x) as usize] = pixel[0] > 0 || pixel[1] > 0 || pixel[2] > 0 || pixel[3] > 0;
+            }
+        }
+        atlas.push(char_data);
+    }
+    Ok(atlas)
+}
+

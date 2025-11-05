@@ -75,6 +75,7 @@ impl TileMap {
 
     pub fn change_tile(&mut self, tile_x: usize, tile_y: usize, layer: usize, new_tile: u32) {
         *self.get_tile_mut(tile_x, tile_y, layer) = new_tile;
+        
         // updating the surrounding tiles (really ugly.... but works)
         for (x, y) in [(tile_x.saturating_sub(1), tile_y), (tile_x + 1, tile_y), (tile_x, tile_y.saturating_sub(1)), (tile_x, tile_y + 1)] {
             if x >= self.get_map_width() || tile_y >= self.get_map_height() { continue; }
@@ -202,8 +203,8 @@ impl TileMap {
         // don't even try to read this or the math, it's a mess, but seems to work for now
         
         // the plus 2 is to make sure blocks at the very edge aren't cut off
-        let visible_width = (window_size.0 as f32 / 8.0 * camera_transform.zoom) as usize + 2;
-        let visible_height = (window_size.1 as f32 / 8.0 * camera_transform.zoom) as usize + 2;
+        let visible_width = (window_size.0 as f32 / 8.0 * camera_transform.zoom) as usize + 3;
+        let visible_height = (window_size.1 as f32 / 8.0 * camera_transform.zoom) as usize + 3;
         let start_x = ((camera_transform.x / 8.) as isize - (visible_width as isize / 2)).max(0) as usize;
         let start_y = ((camera_transform.y / 8.) as isize - (visible_height as isize / 2)).max(0) as usize;
         let end_x = (start_x + visible_width).min(self.get_map_width());

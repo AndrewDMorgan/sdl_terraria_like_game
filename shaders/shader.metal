@@ -3,16 +3,27 @@ float lerp(float left, float right, float alpha) {
     return left * (1.0 - alpha) + right * alpha;
 }
 
+float3 lerp_f3(float3 left, float3 right, float alpha) {
+    return left * (1.0 - alpha) + right * alpha;
+}
+
+float3 ToColor(ulong value) {
+    return float3(
+        ((value >> 0 ) & 0xFF) * 0.00392156862,
+        ((value >> 8 ) & 0xFF) * 0.00392156862,
+        ((value >> 16) & 0xFF) * 0.00392156862
+    );
+}
 
 struct Text {
-    ulong2 info;
     uchar characters[32];
+    ulong2 info;
 };
 
 kernel void ComputeShader (
-    constant uint&   pitch             [[ buffer(0 ) ]],
-    constant uint&   width             [[ buffer(1 ) ]],
-    constant uint&   height            [[ buffer(2 ) ]],
+    constant uint&   pitch             [[ buffer(0 ) ]],  // from sdl2 for padding
+    constant uint&   width             [[ buffer(1 ) ]],  // width of screen
+    constant uint&   height            [[ buffer(2 ) ]],  // height of screen
 
     constant uchar4* entity_textures   [[ buffer(3 ) ]],  // texture data for entities
     constant uchar4* tile_textures     [[ buffer(4 ) ]],  // texture data for tiles
@@ -32,7 +43,10 @@ kernel void ComputeShader (
     constant uint&   num_texts         [[ buffer(14) ]],  // number of text entries
     constant Text*   text_buffer       [[ buffer(15) ]],  // text data
 
-    device   uchar* pixels [[ buffer(16) ]],
+    constant bool*   texture_atlas     [[ buffer(16) ]],  // font
+    constant uint&   default_font_size [[ buffer(17) ]],  // font size
+
+    device   uchar* pixels [[ buffer(18) ]],
     uint2 gid [[ thread_position_in_grid ]]
 ) {
     if (gid.x >= width || gid.y >= height) return;
@@ -81,22 +95,32 @@ kernel void ComputeShader (
     float3 color = float3(0.8, 0.8, 0.9);
     float2 gid_f = float2(gid.x, gid.y);
     // making sure the position isn't outside the tilemap
+    float3 light_color = float3(1.0, 1.0, 1.0);
     float2 position_float = float2(gid.x - camera_position.x, gid.y - camera_position.y);
     uint2 position = uint2(uint(position_float.x), uint(position_float.y));
     if (camera_position.x <= gid.x && camera_position.y <= gid.y) {
         // getting the corrected screen space position
-        float x_coord = metal::floor(position.x * inv_zoom * 0.125);  // 1 / 8
-        float y_coord = metal::floor(position.y * inv_zoom * 0.125);  // 1 / 8
+        float px_zoomed = position.x * inv_zoom;
+        float py_zoomed = position.y * inv_zoom;
+        float px_fract = px_zoomed * 0.125;  // 1 / 8
+        float py_fract = py_zoomed * 0.125;  // 1 / 8
+        uint x_coord = metal::floor(px_fract);
+        uint y_coord = metal::floor(py_fract);
         if (x_coord < tile_map_width && y_coord < tile_map_height) {
-            uint tile_index = x_coord + y_coord * float(tile_map_width);
-            uint offset = (uint(position.x * inv_zoom) % 8) + (uint(position.y * inv_zoom) % 8) * 8;
+            uint tile_index = x_coord + y_coord * tile_map_width;
+            uint offset = (uint(px_zoomed) % 8) + (uint(py_zoomed) % 8) * 8;
             
-            // getting the lighting (fourth layer)
-            ulong light_value = tile_map[tile_index * 4 + 3];
-            float3 light_color = float3(
-                ((light_value >> 0 ) & 0xFF) * 0.00392156862,
-                ((light_value >> 8 ) & 0xFF) * 0.00392156862,
-                ((light_value >> 16) & 0xFF) * 0.00392156862
+            // interpolating the light
+            float3 top_left     = ToColor(tile_map[(x_coord + y_coord * tile_map_width) * 4 + 3]);
+            float3 top_right    = ToColor(tile_map[(x_coord + 1 + y_coord * tile_map_width) * 4 + 3]);
+            float3 bottom_left  = ToColor(tile_map[(x_coord + (y_coord + 1) * tile_map_width) * 4 + 3]);
+            float3 bottom_right = ToColor(tile_map[(x_coord + 1 + (y_coord + 1) * tile_map_width) * 4 + 3]);
+            float interp_x = metal::fract(px_fract);
+            float interp_y = metal::fract(py_fract);
+            light_color = lerp_f3(
+                lerp_f3(top_left, top_right, interp_x),
+                lerp_f3(bottom_left, bottom_right, interp_x),
+                interp_y
             );
             
             // going through the 3 layers ( the first is the forground )
@@ -115,6 +139,9 @@ kernel void ComputeShader (
     }
     
     // rendering entities
+    // is this slow? YES   does it work? for now
+    // todo! optimize this (possibly move it to the cpu end to prevent the O(screen * entities))
+    //     the extra overhead of doing per pixel far outweighs the gpu's power
     float2 half_size = float2(width, height) * 0.5;
     float2 camera_position_corrected = float2(metal::round((gid_f.x - half_size.x) * inv_zoom * 8.0) * 0.125, metal::round((gid_f.y - half_size.y) * inv_zoom * 8.0) * 0.125);
     for (uint i = 0; i < num_entities; i++) {
@@ -123,19 +150,63 @@ kernel void ComputeShader (
         float offset_x    = float(short(ushort(entity.y))) * 0.01;  // using &0xFFFF shouldn't be needed as the cast already does it implicitly
         float offset_y    = float(short(ushort(entity.x >> 48))) * 0.01;
         //uint depth      = (entity.x >> 0 ) & 0xF;
-        if (camera_position_corrected.x >= offset_x && camera_position_corrected.x < offset_x + 8.0 &&
-            camera_position_corrected.y >= offset_y && camera_position_corrected.y < offset_y + 8.0
+        if (camera_position_corrected.x < offset_x || camera_position_corrected.x >= offset_x + 8.0 ||
+            camera_position_corrected.y < offset_y || camera_position_corrected.y >= offset_y + 8.0
         ) {
-            uint texture_id = entity.y >> 32;
-            uint index_offset = uint(camera_position_corrected.x - offset_x) + uint(camera_position_corrected.y - offset_y) * 8;
-            uchar4 texture_color = entity_textures[texture_id * 64 + index_offset];
-            float alpha = texture_color.w * 0.00392156862;
-            color = float3(
-                lerp(color.x, texture_color.x * 0.00392156862, alpha),
-                lerp(color.y, texture_color.y * 0.00392156862, alpha),
-                lerp(color.z, texture_color.z * 0.00392156862, alpha)
-            );
+            continue;
         }
+
+        uint texture_id = entity.y >> 32;
+        uint index_offset = uint(camera_position_corrected.x - offset_x) + uint(camera_position_corrected.y - offset_y) * 8;
+        uchar4 texture_color = entity_textures[texture_id * 64 + index_offset];
+        float alpha = texture_color.w * 0.00392156862;
+        color = float3(
+            lerp(color.x, texture_color.x * 0.00392156862 * light_color.x, alpha),
+            lerp(color.y, texture_color.y * 0.00392156862 * light_color.y, alpha),
+            lerp(color.z, texture_color.z * 0.00392156862 * light_color.z, alpha)
+        );
+    }
+
+    // drawing text
+    for (uint i = 0; i < num_texts; i++) {
+        Text text = text_buffer[i];
+        // the casts should implicitly cut any bits beyond 8 off (so & 0xFF shouldn't be needed)
+        uchar buffer_size = text.info.x;
+        uchar font_size   = text.info.x >> 8;
+        ushort x_offset   = text.info.y >> 48;
+        ushort y_offset   = text.info.y >> 32;
+        // checking the bounds
+        if (gid.x < x_offset || gid.x >= x_offset + buffer_size * (font_size + 2) ||
+            gid.y < y_offset || gid.y >= y_offset + font_size)
+        {
+            continue;
+        }
+        ushort pixel_x_coord = (gid.x - x_offset) % (font_size + 2);
+        if (pixel_x_coord >= font_size) {
+            continue;  // a spacing gap
+        }
+
+        uchar4 text_color = uchar4(
+            uchar(text.info.y >> 8),
+            uchar(text.info.y),
+            uchar(text.info.x >> 56),
+            uchar(text.info.x >> 48)
+        );
+        // now drawing the text........ this is gonna be annoying
+        // which text drawing algorithm shall we choose? None? Welp, apparently that's not a valid algorithm :(
+        ushort x_coord = float(pixel_x_coord) / float(font_size) * default_font_size;
+        ushort y_coord = (gid_f.y - y_offset) / float(font_size) * default_font_size;
+        uchar character = text.characters[(gid.x - x_offset) / (font_size + 2)];
+        uint texture_index = x_coord + y_coord * default_font_size + character * default_font_size * default_font_size;
+        bool atlas_lookup = texture_atlas[texture_index];
+        if (!atlas_lookup) {
+            continue;
+        }
+        color = float3(
+            text_color.x * 0.00392156862,
+            text_color.y * 0.00392156862,
+            text_color.z * 0.00392156862
+        );
     }
 
     uint index = gid.y * pitch + gid.x * 3;

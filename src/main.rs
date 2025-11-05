@@ -14,7 +14,7 @@ this should be a problem localized only to my mac, but who knows
 
 */
 
-use crate::logging::logging::{Log, Logs};
+use crate::logging::logging::{Log, LoggingError, Logs};
 
 mod shaders;
 mod game_manager;
@@ -30,7 +30,9 @@ fn main() {
     match result {
         Ok(_) => {},
         Err(e) => {
-            logs.push(Log { message: format!("Fatal Error: {}", e) });
+            logs.push(Log {
+                message: format!("Fatal Error: {}", e), level: LoggingError::Error
+            });
         }
     }
 }

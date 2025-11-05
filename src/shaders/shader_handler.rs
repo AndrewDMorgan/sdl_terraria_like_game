@@ -18,6 +18,11 @@ impl Float4 {
     }
 }
 
+pub struct Tuple<A, B> {
+    pub first: A,
+    pub second: B,
+}
+
 /// Dictates which shader should be called in which situation
 /// This should link the menue states to the shaders much easier
 /// Each different window context should ideally have its own shader to reduce complexity

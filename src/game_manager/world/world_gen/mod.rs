@@ -47,25 +47,42 @@ impl WorldGenerator {
         for x in 0..tile_map.get_map_width() {
             let dirt_depth = ((noise.get_noise_2d(x as f32, 25.0) * 0.5 + 0.5) * 10.0) as usize;
 
-
+            let mut light_level: u8 = 250;
             for y in 0..tile_map.get_map_height() {
                 let height = ((noise.get_noise_2d(x as f32, y as f32) * 0.5 + 0.5) * 50.0 + 100.0) as usize;
                 let cave_noise = cave_noise.get_noise_2d(x as f32, y as f32);
 
                 if cave_noise > cave_threshold_noise.get_noise_2d(x as f32, y as f32) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
+                    *tile_map.get_light_mut(x, y) = [light_level, light_level, light_level];
                     continue;
                 }
                 
                 // simple flat world for now
                 if y == height {
                     *tile_map.get_tile_mut(x, y, 0) = 1;
+                    light_level = light_level.saturating_sub(25);
                 } else if y > height && y <= height + dirt_depth {
-                    *tile_map.get_tile_mut(x, y, 0) = 29  // dirt
+                    *tile_map.get_tile_mut(x, y, 0) = 29;  // dirt
+                    light_level = light_level.saturating_sub(25);
                 } else if y > height + dirt_depth {
                     *tile_map.get_tile_mut(x, y, 0) = 44; // stone
+                    light_level = light_level.saturating_sub(25);
                 }
-                // todo! temporary, this is just so things are actually visible
-                *tile_map.get_light_mut(x, y) = [255, 255, 255];
+                *tile_map.get_light_mut(x, y) = [light_level, light_level, light_level];
+            }
+        }
+        
+        for _ in 0..16 {
+            for x in 0..tile_map.get_map_width() {
+                for y in 0..tile_map.get_map_height() {
+                    let left = tile_map.get_light_mut(x.saturating_sub(1), y)[0].saturating_sub(25);
+                    let right = tile_map.get_light_mut((x + 1).min(tile_map.get_map_width() - 1), y)[0].saturating_sub(25);
+                    let up = tile_map.get_light_mut(x, y.saturating_sub(1))[0].saturating_sub(25);
+                    let down = tile_map.get_light_mut(x, (y + 1).min(tile_map.get_map_height() - 1))[0].saturating_sub(25);
+                    let self_light = tile_map.get_light_mut(x, y)[0];
+                    let light_level = left.max(right.max(up.max(down.max(self_light))));
+                    *tile_map.get_light_mut(x, y) = [light_level, light_level, light_level];
+                }
             }
         }
 

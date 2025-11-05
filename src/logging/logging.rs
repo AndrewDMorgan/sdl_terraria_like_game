@@ -15,10 +15,18 @@ pub enum Logging {
     PerformanceOnly,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub enum LoggingError {
+    Warning,
+    Error,
+    Info,
+}
+
 // a basic logging function to make reading errors slightly easier
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Log {
     pub message: String,
+    pub level: LoggingError,
 }
 
 // wraps the Log into a vector, but alliased to allow serialization
@@ -54,6 +62,12 @@ impl Logs {
 impl Drop for Logs {
     fn drop(&mut self) {
         if self.1 { self.save().unwrap(); }
+        println!("{:?}", self.0.iter().filter(|log| {
+            match log.level {
+                LoggingError::Error => true,
+                _ => false,
+            }
+        }).collect::<Vec<_>>());
     }
 }
 

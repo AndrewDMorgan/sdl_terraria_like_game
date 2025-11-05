@@ -1,6 +1,6 @@
 use crate::core::event_handling::event_handler::{ButtonState, EventHandler};
 use crate::game_manager::entities::entity::Entity;
-use crate::game_manager::world::tile_map::{self, DIRT_IDS, GRASS_IDS, STONE_IDS};
+use crate::game_manager::world::tile_map;
 use crate::core::timer::Timer;
 use crate::textures::animation::Animator;
 use crate::textures::sprite::{Hitbox, Sprite};
