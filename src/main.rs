@@ -24,14 +24,24 @@ mod core;
 mod utill;
 
 fn main() {
-    let mut logs = Logs(Vec::new(), false);
+    let logs = std::sync::Mutex::new(
+        Logs(Vec::new(), false)
+    );
 
-    let result = core::start(&mut logs);
+    let result = std::panic::catch_unwind(||
+        core::start(&mut *logs.lock().unwrap())
+    );
+    let logs = &mut *logs.lock().unwrap();
     match result {
-        Ok(_) => {},
-        Err(e) => {
+        Ok(Ok(_)) => {},
+        Ok(Err(e)) => {
             logs.push(Log {
                 message: format!("Fatal Error: {}", e), level: LoggingError::Error
+            });
+        },
+        Err(e) => {
+            logs.push(Log {
+                message: format!("[Uncaught] Fatal Error: {:?}", e), level: LoggingError::Error
             });
         }
     }

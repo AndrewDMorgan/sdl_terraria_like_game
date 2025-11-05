@@ -109,7 +109,16 @@ impl Player {
                 tile_map.change_tile(tile_x, tile_y, 0, 0);
             }
         }
-
+        if let ButtonState::Pressed | ButtonState::Held = event_handler.mouse.right {
+                let mouse_x = self.camera.x - screen_size.0 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.0 as f32 * self.camera.zoom;
+                let mouse_y = self.camera.y - screen_size.1 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.1 as f32 * self.camera.zoom;
+                let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
+                let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
+                if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
+                    tile_map.change_tile(tile_x, tile_y, 0, 88);
+                }
+        }
+        
         // smooth camera movement!
         self.camera.x = lerp(
             self.camera.x,

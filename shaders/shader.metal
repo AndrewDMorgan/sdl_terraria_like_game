@@ -9,7 +9,7 @@ float3 lerp_f3(float3 left, float3 right, float alpha) {
 
 float3 ToColor(ulong value) {
     return float3(
-        ((value >> 0 ) & 0xFF) * 0.00392156862,
+        ((value      ) & 0xFF) * 0.00392156862,
         ((value >> 8 ) & 0xFF) * 0.00392156862,
         ((value >> 16) & 0xFF) * 0.00392156862
     );
@@ -104,8 +104,8 @@ kernel void ComputeShader (
         float py_zoomed = position.y * inv_zoom;
         float px_fract = px_zoomed * 0.125;  // 1 / 8
         float py_fract = py_zoomed * 0.125;  // 1 / 8
-        uint x_coord = metal::floor(px_fract);
-        uint y_coord = metal::floor(py_fract);
+        uint x_coord = metal::floor(px_fract) + 1;
+        uint y_coord = metal::floor(py_fract) + 1;
         if (x_coord < tile_map_width && y_coord < tile_map_height) {
             uint tile_index = x_coord + y_coord * tile_map_width;
             uint offset = (uint(px_zoomed) % 8) + (uint(py_zoomed) % 8) * 8;
@@ -115,13 +115,27 @@ kernel void ComputeShader (
             float3 top_right    = ToColor(tile_map[(x_coord + 1 + y_coord * tile_map_width) * 4 + 3]);
             float3 bottom_left  = ToColor(tile_map[(x_coord + (y_coord + 1) * tile_map_width) * 4 + 3]);
             float3 bottom_right = ToColor(tile_map[(x_coord + 1 + (y_coord + 1) * tile_map_width) * 4 + 3]);
-            float interp_x = metal::fract(px_fract);
-            float interp_y = metal::fract(py_fract);
-            light_color = lerp_f3(
+            float interp_x = metal::pow(metal::fract(px_fract), 2.0);
+            float interp_y = metal::pow(metal::fract(py_fract), 2.0);
+            float3 light_color_1 = lerp_f3(
                 lerp_f3(top_left, top_right, interp_x),
                 lerp_f3(bottom_left, bottom_right, interp_x),
                 interp_y
             );
+
+            // interpolating the light
+            top_right    = ToColor(tile_map[(x_coord - 1 + y_coord * tile_map_width) * 4 + 3]);
+            bottom_left  = ToColor(tile_map[(x_coord + (y_coord - 1) * tile_map_width) * 4 + 3]);
+            bottom_right = ToColor(tile_map[(x_coord - 1 + (y_coord - 1) * tile_map_width) * 4 + 3]);
+            interp_x = metal::pow(1.0 - metal::fract(px_fract), 2.0);
+            interp_y = metal::pow(1.0 - metal::fract(py_fract), 2.0);
+            float3 light_color_2 = lerp_f3(
+                lerp_f3(top_left, top_right, interp_x),
+                lerp_f3(bottom_left, bottom_right, interp_x),
+                interp_y
+            );
+            light_color = (light_color_1 + light_color_2) * 0.5;
+            color *= light_color;
             
             // going through the 3 layers ( the first is the forground )
             for (int i = 2; i >= 0; i--) {
@@ -147,12 +161,18 @@ kernel void ComputeShader (
     for (uint i = 0; i < num_entities; i++) {
         ulong2 entity = entity_data[i];
         //uint rotation   =(entity.y >> 16) & 0xFFFF;
+        // the 0.01 scales it correctly to remove the error caused by limited bits
         float offset_x    = float(short(ushort(entity.y))) * 0.01;  // using &0xFFFF shouldn't be needed as the cast already does it implicitly
-        float offset_y    = float(short(ushort(entity.x >> 48))) * 0.01;
         //uint depth      = (entity.x >> 0 ) & 0xF;
-        if (camera_position_corrected.x < offset_x || camera_position_corrected.x >= offset_x + 8.0 ||
-            camera_position_corrected.y < offset_y || camera_position_corrected.y >= offset_y + 8.0
-        ) {
+
+        // hopefully this is faster having them broken up by reducing the average number of instructions used
+        // but idk, cause it'll probably also add other instructions in doing so and the offset calculations
+        // are fairly cheap
+        if (camera_position_corrected.x < offset_x || camera_position_corrected.x >= offset_x + 8.0) {
+            continue;
+        }
+        float offset_y    = float(short(ushort(entity.x >> 48))) * 0.01;
+        if (camera_position_corrected.y < offset_y || camera_position_corrected.y >= offset_y + 8.0) {
             continue;
         }
 
@@ -210,6 +230,10 @@ kernel void ComputeShader (
     }
 
     uint index = gid.y * pitch + gid.x * 3;
+
+    /*if (gid.x == width / 2) {
+        color = float3(0., 0., 0.);
+    }*/
 
     pixels[index + 0] = uchar(color.x * 255.0); // R
     pixels[index + 1] = uchar(color.y * 255.0); // G
