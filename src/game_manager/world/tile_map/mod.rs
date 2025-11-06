@@ -75,8 +75,14 @@ impl TileMap {
     pub fn get_light_mut(&mut self, x: usize, y: usize) -> &mut [u8; 3] {
         &mut self.lighting[y][x]
     }
-
+    
     pub fn change_tile(&mut self, tile_x: usize, tile_y: usize, layer: usize, new_tile: u32) {
+        let mut min_edit_height = tile_y;
+        let mut max_edit_height = tile_y;
+        let mut edit_width = 0;
+
+        let was_removed_light = TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(tile_x, tile_y as usize, 0));
+
         *self.get_tile_mut(tile_x, tile_y, layer) = new_tile;
         if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(tile_x, tile_y as usize, 0)) {
             *self.get_light_mut(tile_x, tile_y as usize) = TILE_LIGHTS
@@ -84,15 +90,38 @@ impl TileMap {
                 .find(|(tile_id, _)| *tile_id == self
                     .get_tile(tile_x, tile_y as usize, 0))
                 .unwrap().1;
+        } else if was_removed_light {
+            //*self.get_light_mut(tile_x, tile_y) = [0, 0, 0];
+            min_edit_height -= 8;
+            max_edit_height += 8;
+            edit_width = 8;
+            for x_index in tile_x.saturating_sub(16)..(tile_x + 16).min(self.get_map_width() - 1) {
+                for y_index in (tile_y - 16)..(tile_y + 16).min(self.get_map_height()) {
+                    if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(x_index, y_index as usize, 0)) {
+                        *self.get_light_mut(x_index, y_index as usize) = TILE_LIGHTS
+                            .iter()
+                            .find(|(tile_id, _)| *tile_id == self
+                                .get_tile(x_index, y_index as usize, 0))
+                            .unwrap().1;
+                        continue;
+                    }
+                    let l;
+                    if self.sky_light[x_index] as usize >= y_index {
+                        l = 250;
+                    } else {
+                        l = 0;
+                    }
+                    *self.get_light_mut(x_index, y_index) = [l, l, l];
+                }
+            }
         }
 
         // updating the skylight
-        let min_edit_height = tile_y;
-        let mut max_edit_height = tile_y;
         if tile_y <= self.sky_light[tile_x] as usize && SOLID_TILES.iter().any(|solid_ids| solid_ids.contains(&new_tile)) {
             // Update sky_light if the new tile is solid and above the current sky_light
             self.sky_light[tile_x] = tile_y as u32;
             if tile_y as u32 <= self.sky_light[tile_x] {
+                edit_width = 8;
                 for x_index in tile_x.saturating_sub(16)..(tile_x + 16).min(self.get_map_width() - 1) {
                     for y_index in tile_y..self.get_map_height() {
                         if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(x_index, y_index as usize, 0)) {
@@ -143,7 +172,7 @@ impl TileMap {
         }
 
         for _ in 0..16 {
-            for x in tile_x.saturating_sub(16)..(tile_x + 16).min(self.get_map_width() - 1) {
+            for x in tile_x.saturating_sub(16 + edit_width)..(tile_x + 16 + edit_width).min(self.get_map_width() - 1) {
                 for y in min_edit_height.saturating_sub(16)..(max_edit_height + 16).min(self.get_map_height()) {
                     let left = self.get_light_mut(x.saturating_sub(1), y).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
                     let right = self.get_light_mut((x + 1).min(self.get_map_width() - 1), y).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
@@ -154,7 +183,6 @@ impl TileMap {
                         .enumerate()
                         .map(|(i, f)| (*f).max(right[i].max(up[i].max(down[i].max(self_light[i])))))
                         .collect::<Vec<u8>>();
-                    //let light_level = left.max(right.max(up.max(down.max(self_light))));
                     *self.get_light_mut(x, y) = [light_level[0], light_level[1], light_level[2]];
                 }
             }

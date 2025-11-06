@@ -15,6 +15,8 @@ use crate::shaders::*;
 pub(crate) mod timer;
 use timer::Timer;
 
+pub(crate) mod rendering;
+
 /// The starting width of the application window
 static WINDOW_START_WIDTH: u32 = 1200;
 /// The starting height of the application window
@@ -49,7 +51,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     // this texture will than be uploaded onto the window_surface
     let texture_creator: TextureCreator<WindowContext> = window_surface.texture_creator();
     let mut surface_texture = texture_creator
-        .create_texture(PixelFormatEnum::RGB24, TextureAccess::Streaming, WINDOW_START_WIDTH, WINDOW_START_HEIGHT)
+        .create_texture(PixelFormatEnum::RGB24, TextureAccess::Streaming,   WINDOW_START_WIDTH, WINDOW_START_HEIGHT)
         .map_err(|e| e.to_string())?;
     let mut surface_texture_size = (WINDOW_START_WIDTH, WINDOW_START_HEIGHT);
 
@@ -249,6 +251,14 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             let out_ptr = shader.get_buffer_contents(18);
             let out_slice = unsafe { std::slice::from_raw_parts(out_ptr, pixels.len()) };
             pixels.copy_from_slice(out_slice);
+
+            // rendering ui stuff
+            game.render_ui(pixels, window_size).map_err(|e| {
+                ShaderError::new(
+                    format!("[Ui Error] Error while rendering ui: {:?}", e)
+                )
+            })?;
+            
             Ok(())
         })?;
         match buffer_result {  // slightly less violently exiting, and at least telling the user why

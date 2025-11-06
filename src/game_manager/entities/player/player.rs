@@ -1,5 +1,7 @@
 use crate::core::event_handling::event_handler::{ButtonState, EventHandler};
 use crate::game_manager::entities::entity::Entity;
+use crate::game_manager::entities::player::inventory::Inventory;
+use crate::game_manager::entities::player::player_ui::PlayerUiManager;
 use crate::game_manager::world::tile_map;
 use crate::core::timer::Timer;
 use crate::textures::animation::Animator;
@@ -26,12 +28,17 @@ impl From<u8> for PlayerAnimation {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct PlayerData {
+    inventory: Inventory,
+}
 
 /// The player entity module
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Player {
     pub camera: CameraTransform,
     pub entity: Entity<PlayerAnimation>,
+    player_data: PlayerData,
 
     // todo! move the player model into an 'Entity' struct later that'll manage entities
     // this should remove some of the dependencies that have been injected into here
@@ -52,7 +59,14 @@ impl Player {
                 }, Animator::new(vec![vec![0]], vec![0.0])),
                 position: (-20.0, 115.0 * 8.0),
             },
+            player_data: PlayerData {
+                inventory: Inventory::default(),
+            },
         }
+    }
+
+    pub fn render_ui(&mut self, buffer: &mut [u8], buffer_size: (u32, u32), player_ui_manager: &mut PlayerUiManager) -> Result<(), crate::core::rendering::ui::UiError> {
+        player_ui_manager.render_ui(buffer, buffer_size, &mut self.player_data)
     }
 
     fn move_player(&mut self, delta_x: f32, delta_y: f32, tile_map: &tile_map::TileMap) {

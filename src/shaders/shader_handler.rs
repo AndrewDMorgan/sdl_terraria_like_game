@@ -171,3 +171,9 @@ pub struct ShaderError {
     details: String,
 }
 
+impl ShaderError {
+    pub fn new(details: String) -> Self {
+        ShaderError { details }
+    }
+}
+
