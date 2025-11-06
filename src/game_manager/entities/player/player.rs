@@ -2,6 +2,7 @@ use crate::core::event_handling::event_handler::{ButtonState, EventHandler};
 use crate::game_manager::entities::entity::Entity;
 use crate::game_manager::entities::player::inventory::Inventory;
 use crate::game_manager::entities::player::player_ui::PlayerUiManager;
+use crate::game_manager::game::GameError;
 use crate::game_manager::world::tile_map;
 use crate::core::timer::Timer;
 use crate::textures::animation::Animator;
@@ -97,7 +98,7 @@ impl Player {
         }
     }
 
-    pub fn update_key_events(&mut self, timer: &Timer, event_handler: &EventHandler, tile_map: &mut tile_map::TileMap, screen_size: (u32, u32)) {
+    pub fn update_key_events(&mut self, timer: &Timer, event_handler: &EventHandler, tile_map: &mut tile_map::TileMap, screen_size: (u32, u32)) -> Result<(), GameError> {
         self.entity.sprite.update_frame(timer.delta_time);  // this is the best place to do this ig
 
         if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Right) {
@@ -120,7 +121,7 @@ impl Player {
             let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
             let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
             if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
-                tile_map.change_tile(tile_x, tile_y, 0, 0);
+                tile_map.change_tile(tile_x, tile_y, 0, 0)?;
             }
         }
         if let ButtonState::Pressed | ButtonState::Held = event_handler.mouse.right {
@@ -129,7 +130,7 @@ impl Player {
                 let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
                 let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
                 if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
-                    tile_map.change_tile(tile_x, tile_y, 0, 88);
+                    tile_map.change_tile(tile_x, tile_y, 0, 88)?;
                 }
         }
         
@@ -144,6 +145,8 @@ impl Player {
             self.entity.position.1,
             10.0 * timer.delta_time as f32,
         );
+
+        Ok(())
     }
     
     // the entities are a 128 bit value, with the first 32 being the texture id (similar to tiles),

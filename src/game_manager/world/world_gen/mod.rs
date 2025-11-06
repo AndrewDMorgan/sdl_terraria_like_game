@@ -1,6 +1,6 @@
 use fastnoise_lite::{FastNoiseLite, NoiseType, FractalType};
 
-use crate::game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, STONE_IDS, TILE_LIGHTS};
+use crate::{game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, STONE_IDS, TILE_LIGHTS, TileMapError}, logging::logging::LoggingError};
 
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -16,7 +16,7 @@ impl WorldGenerator {
     }
 
     // todo! add perlin noise and stuff
-    pub fn generate_tile_map(&self, tile_map: &mut crate::game_manager::world::tile_map::TileMap) {
+    pub fn generate_tile_map(&self, tile_map: &mut crate::game_manager::world::tile_map::TileMap) -> Result<(), TileMapError> {
         let mut noise = FastNoiseLite::new();
         noise.set_seed(Some(1337));
         noise.set_noise_type(Some(NoiseType::Perlin));
@@ -253,7 +253,14 @@ impl WorldGenerator {
         for x in 0..tile_map.get_map_width() {
             for y in 0..tile_map.get_map_height() {
                 if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == tile_map.get_tile(x, y as usize, 0)) {
-                    *tile_map.get_light_mut(x, y as usize) = TILE_LIGHTS.iter().find(|(tile_id, _)| *tile_id == tile_map.get_tile(x, y as usize, 0)).unwrap().1;
+                    *tile_map.get_light_mut(x, y as usize) = TILE_LIGHTS
+                        .iter()
+                        .find(|(tile_id, _)| *tile_id == tile_map
+                            .get_tile(x, y as usize, 0))
+                        .ok_or_else(|| TileMapError {
+                            message: format!("[WorldGen Error] Unable to locate light for tile at ({}, {}) while generating tile map", x, y),
+                            level: LoggingError::Error
+                        })?.1;
                 }
             }
         }
@@ -270,8 +277,7 @@ impl WorldGenerator {
                     *tile_map.get_light_mut(x, y) = [light_level[0], light_level[1], light_level[2]];
                 }
             }
-        }
-
+        } Ok(())
     }
 }
 

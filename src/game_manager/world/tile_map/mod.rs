@@ -1,6 +1,8 @@
 
 use crate::game_manager::entities::player::player::CameraTransform;
+use crate::game_manager::game::GameError;
 use crate::game_manager::world::world_gen::WorldGenerator;
+use crate::logging::logging::LoggingError;
 
 pub static GRASS_IDS: &[u32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 47];
 pub static DIRT_IDS: &[u32] = &[15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 46];
@@ -13,6 +15,30 @@ pub static SOLID_TILES: &[&[u32]] = &[
     STONE_IDS,
 ];
 
+pub struct TileMapError {
+    pub(crate) message: String,
+    pub(crate) level: LoggingError,
+}
+
+impl From<TileMapError> for GameError {
+    fn from(error: TileMapError) -> Self {
+        GameError {
+            message: error.message,
+            severity: match error.level {
+                LoggingError::Info => crate::game_manager::game::Severity::Low,
+                LoggingError::Warning => crate::game_manager::game::Severity::Medium,
+                LoggingError::Error => crate::game_manager::game::Severity::Fatal,
+            },
+        }
+    }
+}
+
+impl From<TileMapError> for String {
+    fn from(error: TileMapError) -> Self {
+        format!("[Tilemap Error of Severity: {:?}] {}", error.level, error.message)
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TileMap {
     tiles: Vec<Vec<[u32; 3]>>,
@@ -21,16 +47,16 @@ pub struct TileMap {
 }
 
 impl TileMap {
-    pub fn new(width: usize, height: usize, world_generator: Option<&WorldGenerator>) -> Self {
+    pub fn new(width: usize, height: usize, world_generator: Option<&WorldGenerator>) -> Result<Self, TileMapError> {
         let mut tile_map = TileMap {
             tiles: vec![vec![[0; 3]; width]; height],
             lighting: vec![vec![[0; 3]; width]; height],
             sky_light: vec![height as u32; width],
         };
         if let Some(generator) = world_generator {
-            generator.generate_tile_map(&mut tile_map);
+            generator.generate_tile_map(&mut tile_map)?;
         }
-        tile_map
+        Ok(tile_map)
     }
 
     pub fn get_tile_mut(&mut self, x: usize, y: usize, layer: usize) -> &mut u32 {
@@ -75,8 +101,8 @@ impl TileMap {
     pub fn get_light_mut(&mut self, x: usize, y: usize) -> &mut [u8; 3] {
         &mut self.lighting[y][x]
     }
-    
-    pub fn change_tile(&mut self, tile_x: usize, tile_y: usize, layer: usize, new_tile: u32) {
+
+    pub fn change_tile(&mut self, tile_x: usize, tile_y: usize, layer: usize, new_tile: u32) -> Result<(), TileMapError> {
         let mut min_edit_height = tile_y;
         let mut max_edit_height = tile_y;
         let mut edit_width = 0;
@@ -89,7 +115,10 @@ impl TileMap {
                 .iter()
                 .find(|(tile_id, _)| *tile_id == self
                     .get_tile(tile_x, tile_y as usize, 0))
-                .unwrap().1;
+                .ok_or_else(|| TileMapError {
+                    message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles", tile_x, tile_y),
+                    level: LoggingError::Error
+                })?.1;
         } else if was_removed_light {
             //*self.get_light_mut(tile_x, tile_y) = [0, 0, 0];
             min_edit_height -= 8;
@@ -102,7 +131,10 @@ impl TileMap {
                             .iter()
                             .find(|(tile_id, _)| *tile_id == self
                                 .get_tile(x_index, y_index as usize, 0))
-                            .unwrap().1;
+                            .ok_or_else(|| TileMapError {
+                                message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles and removing light source", x_index, y_index),
+                                level: LoggingError::Error
+                            })?.1;
                         continue;
                     }
                     let l;
@@ -124,12 +156,16 @@ impl TileMap {
                 edit_width = 8;
                 for x_index in tile_x.saturating_sub(16)..(tile_x + 16).min(self.get_map_width() - 1) {
                     for y_index in tile_y..self.get_map_height() {
+                        max_edit_height = max_edit_height.max(y_index);
                         if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(x_index, y_index as usize, 0)) {
                             *self.get_light_mut(x_index, y_index as usize) = TILE_LIGHTS
                                 .iter()
                                 .find(|(tile_id, _)| *tile_id == self
                                     .get_tile(x_index, y_index as usize, 0))
-                                .unwrap().1;
+                                .ok_or_else(|| TileMapError {
+                                    message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles", x_index, y_index),
+                                    level: LoggingError::Error
+                                })?.1;
                             continue;
                         }
                         let l;
@@ -141,7 +177,6 @@ impl TileMap {
                             }
                             l = 0;
                         }
-                        max_edit_height = max_edit_height.max(y_index);
                         *self.get_light_mut(x_index, y_index) = [l, l, l];
                     }
                 }
@@ -164,7 +199,10 @@ impl TileMap {
                         .iter()
                         .find(|(tile_id, _)| *tile_id == self
                             .get_tile(tile_x, y_index as usize, 0))
-                        .unwrap().1;
+                        .ok_or_else(|| TileMapError {
+                            message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles", tile_x, y_index),
+                            level: LoggingError::Error
+                        })?.1;
                     continue;
                 }
                 *self.get_light_mut(tile_x, y_index as usize) = [250, 250, 250];
@@ -308,7 +346,7 @@ impl TileMap {
                 };
                 *self.get_tile_mut(x, y, layer) = new_tile;
             }
-        }
+        } Ok(())
     }
 
     pub fn get_render_slice(&self, camera_transform: &CameraTransform, window_size: (u32, u32)) -> (Vec<[u64; 4]>, CameraTransform, (u32, u32)) {

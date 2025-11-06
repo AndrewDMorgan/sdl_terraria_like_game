@@ -26,7 +26,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     let logging_level = Logging::Everything;
     
     // todo! temporary just to handle the game for now, no menues or anything
-    let mut game = Game::new();
+    let mut game = Game::new()?;
 
     // Initialize SDL2
     let sdl = sdl2::init()?;
@@ -242,7 +242,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                     // this is a slightly odd setup for me; usually I update entities than render, not render than update
                     //    technically speaking, because the gpu requires non-mutating data, even though the updating is
                     //    concurrently happening, it's using the old state of the game, so it kinda does act as render than update
-                    game.update_key_events(&timer, &event_handler, window_size);
+                    game.update_key_events(&timer, &event_handler, window_size)?;
 
                     elapsed_for_event_handling = timer.elapsed_frame().as_secs_f64();
                     Ok(())

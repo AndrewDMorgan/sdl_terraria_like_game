@@ -9,8 +9,7 @@ impl PlayerUiManager {
     pub fn render_ui(&self, buffer: &mut [u8], buffer_size: (u32, u32), player_data: &mut PlayerData) -> Result<(), crate::core::rendering::ui::UiError> {
         for element in &self.ui_elements {
             element.render(buffer, buffer_size, player_data)?;
-        }
-        Ok(())
+        } Ok(())
     }
 }
 

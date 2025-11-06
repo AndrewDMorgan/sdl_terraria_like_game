@@ -17,6 +17,11 @@ pub fn get_texture_atlas<const TEXTURE_COUNT: usize>(path: &str, tile_size: (u32
     // for each slice, if it's not empty, add it to the textures array
     let entries = std::fs::read_dir(path).map_err(|e| TextureError { details: format!("Failed to read texture directory: {}", e) })?;
     let mut texture_index = 1 ; // reserving 0 for empty texture
+    
+    // sorting so they are pulled in by a consistent order (before it was a pain to align them; adding a new texture would shift everything which isn't maintainable)
+    // now, all texture names can begin with a number or identifier which will be used to sort it instead so it's consistent
+    let mut entries = entries.collect::<Vec<_>>();
+    entries.sort_by_key(|e| e.as_ref().map(|e| e.path()).unwrap_or_default());
     for entry in entries {
         let entry = entry.map_err(|e| TextureError { details: format!("Failed to read texture directory entry: {}", e) })?;
         let path = entry.path();

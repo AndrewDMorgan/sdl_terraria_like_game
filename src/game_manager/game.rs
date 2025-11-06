@@ -27,7 +27,7 @@ impl Game {
 
         Ok(())
     }
-    
+
     // the version parameter should hopefully make it easier to update old saves into newer versions by targeting them specifically
     fn file_loader<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, GameError> {
         match std::fs::File::open(path) {
@@ -60,30 +60,30 @@ impl Game {
         })
     }
 
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, GameError> {
         let world_generator = WorldGenerator::new();
         let mut tile_map_manager = TileMapManager::new();
         // todo! temporary for now; eventually a world creation menue will be added
         tile_map_manager.replace_tile_map(
             Dimension::Overworld,
-            TileMap::new(4095, 256, Some(&world_generator))
+            TileMap::new(4095, 256, Some(&world_generator))?
         );
-        Game {
+        Ok(Game {
             player: Player::new(),
             tile_map: tile_map_manager,
             world_generator: world_generator,
             player_ui_manager: PlayerUiManager::default(),
-        }
+        })
     }
 
     pub fn update_key_events(
         &mut self, timer: &crate::core::timer::Timer,
         event_handler: &crate::core::event_handling::event_handler::EventHandler,
         screen_size: (u32, u32)
-    ) {
+    ) -> Result<(), GameError> {
         if let Some(tile_map) = self.tile_map.get_current_map(Dimension::Overworld) {
-            self.player.update_key_events(timer, event_handler, tile_map, screen_size);
-        }
+            self.player.update_key_events(timer, event_handler, tile_map, screen_size)?;
+        } Ok(())
     }
 
     pub fn get_tilemap_manager(&mut self) -> &mut TileMapManager {
@@ -106,6 +106,12 @@ impl Game {
 pub struct GameError {
     pub message: String,
     pub severity: Severity,
+}
+
+impl From<GameError> for String {
+    fn from(error: GameError) -> Self {
+        format!("[Game Error of Severity: {:?}] {}", error.severity, error.message)
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
