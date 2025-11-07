@@ -31,7 +31,8 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     // this could, in theory, be configurable, but for now, debugging is necessary so this is fine (and there's no ui and therefore no settings...)
     let logging_level = Logging::Everything;
     
-    // todo! temporary just to handle the game for now, no menues or anything
+    // todo! temporary just to handle the game for now, no menues or anything (umm..... it does have some ui now... but we'll go with that)
+    //     *temporary apparently means permanent? Either way, it's here to stay
     let mut game = Game::new(logs)?;
 
     // Initialize SDL2
@@ -200,9 +201,9 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                         text[2 ] = 'l' as u8;
                         text[3 ] = 'l' as u8;
                         text[4 ] = 'o' as u8;
-                        text[5 ] = ' ' as u8;
-                        text[6 ] = 'W' as u8;
-                        text[7 ] = 'o' as u8;
+                        text[5 ] = ' ' as u8;  // how did any of this manage to actually work??
+                        text[6 ] = 'W' as u8;  // anyway, it doesn't matter, because it appears all text rendering will happen on the cpu anyways
+                        text[7 ] = 'o' as u8;  // all that effort... but the text has to be rendered last, during the ui pass, not this pass
                         text[8 ] = 'r' as u8;
                         text[9 ] = 'l' as u8;
                         text[10] = 'd' as u8;
@@ -262,7 +263,6 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             pixels.copy_from_slice(out_slice);
 
             // rendering ui stuff
-            println!("pitch {} width {}", pitch, window_size.0);
             game.render_ui(pixels, window_size, pitch).map_err(|e| {
                 ShaderError::new(
                     format!("[Ui Error] Error while rendering ui: {:?}", e)
@@ -295,7 +295,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 }
             }
         }
-
+        
         let elapsed_for_gpu_drawing = timer.elapsed_frame().as_secs_f64();
 
         // !====! No Rendering Beyond Here !====!
@@ -332,8 +332,6 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         if logs.was_updated() {
             logs.save()?;
         }
-
-        //println!("Frame time: {:.3} ms and {:.0} fps", elapsed.as_secs_f32() * 1000.0, 1. / elapsed.as_secs_f64());
     }
 
     logs.save()?;

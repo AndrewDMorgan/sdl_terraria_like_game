@@ -1,4 +1,6 @@
-use crate::{core::rendering::ui::UiElement, game_manager::entities::player::{inventory::generate_player_hotbar_ui_element, player::PlayerData}, logging::logging::Log, textures::textures::{get_font_atlas, get_texture_atlas}};
+use crate::{core::rendering::ui::UiElement,
+            game_manager::entities::player::{inventory::generate_player_hotbar_ui_element, player::PlayerData},
+            logging::logging::Log, textures::textures::get_texture_atlas};
 use std::rc::Rc;
 
 static MAX_FONT_CHARACTERS: usize = u16::MAX as usize;
