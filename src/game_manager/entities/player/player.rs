@@ -31,7 +31,7 @@ impl From<u8> for PlayerAnimation {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PlayerData {
-    inventory: Inventory,
+    pub inventory: Inventory,
 }
 
 /// The player entity module
@@ -61,13 +61,13 @@ impl Player {
                 position: (-20.0, 115.0 * 8.0),
             },
             player_data: PlayerData {
-                inventory: Inventory::default(),
+                inventory: Inventory::new(),
             },
         }
     }
 
-    pub fn render_ui(&mut self, buffer: &mut [u8], buffer_size: (u32, u32), player_ui_manager: &mut PlayerUiManager) -> Result<(), crate::core::rendering::ui::UiError> {
-        player_ui_manager.render_ui(buffer, buffer_size, &mut self.player_data)
+    pub fn render_ui(&mut self, buffer: &mut [u8], buffer_size: (u32, u32), player_ui_manager: &mut PlayerUiManager, pitch: usize) -> Result<(), crate::core::rendering::ui::UiError> {
+        player_ui_manager.render_ui(buffer, buffer_size, &mut self.player_data, pitch)
     }
 
     fn move_player(&mut self, delta_x: f32, delta_y: f32, tile_map: &tile_map::TileMap) {

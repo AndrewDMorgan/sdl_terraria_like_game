@@ -22,22 +22,31 @@ static WINDOW_START_WIDTH: u32 = 1200;
 /// The starting height of the application window
 static WINDOW_START_HEIGHT: u32 = 750;
 
+/// The minimum size of the window (mostly so ui doesn't get completely messed up)
+static MINIMUM_WINDOW_WIDTH: u32 = 1200;
+/// The minimum size of the window (mostly so ui doesn't get completely messed up)
+static MINIMUM_WINDOW_HEIGHT: u32 = 750;
+
 pub fn start(logs: &mut Logs) -> Result<(), String> {
+    // this could, in theory, be configurable, but for now, debugging is necessary so this is fine (and there's no ui and therefore no settings...)
     let logging_level = Logging::Everything;
     
     // todo! temporary just to handle the game for now, no menues or anything
-    let mut game = Game::new()?;
+    let mut game = Game::new(logs)?;
 
     // Initialize SDL2
     let sdl = sdl2::init()?;
     let video = sdl.video()?;
     
     // Create window
-    let window = video
+    let mut window = video
         .window("Name of Game (todo!)", WINDOW_START_WIDTH, WINDOW_START_HEIGHT)
+        .position_centered()
         .opengl()
         .resizable()
         .build()
+        .map_err(|e| e.to_string())?;
+    window.set_minimum_size(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
         .map_err(|e| e.to_string())?;
     
     // --- Create an SDL2 surface and texture ---
@@ -61,7 +70,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     let device = Device::system_default()
         .ok_or_else(|| String::from("Failed to get system default device"))?;
     let shaders = shader_loader::load_game_shaders(&device, (device_width as u32, device_height as u32), logs)?;
-    let mut shader_handler = shader_handler::ShaderHandler::new(device, shaders);
+    let mut shader_handler = shader_handler::ShaderHandler::new(device, [shaders]);
     
     // for event stuff
     let mut event_handler = event_handler::EventHandler::new();
@@ -182,7 +191,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                         100u128 << 112 |  // x offset
                         90u128  << 96  |  // y offset
                         (((190u32 << 16) as u128) << 48) |  // color
-                        16u128  << 8   |  // font size
+                        8u128  << 8   |  // font size
                         12u128,  // buffer size
                     second: {
                         let mut text = [0u8; 32];
@@ -253,7 +262,8 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             pixels.copy_from_slice(out_slice);
 
             // rendering ui stuff
-            game.render_ui(pixels, window_size).map_err(|e| {
+            println!("pitch {} width {}", pitch, window_size.0);
+            game.render_ui(pixels, window_size, pitch).map_err(|e| {
                 ShaderError::new(
                     format!("[Ui Error] Error while rendering ui: {:?}", e)
                 )

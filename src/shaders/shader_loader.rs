@@ -12,10 +12,10 @@ static TILE_SIZE: (u32, u32) = (8, 8);
 static MAX_CHARACTERS: usize = 32;
 
 /// Loads all shaders required for the game and returns them as an array
-pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mut Logs) -> Result<[Shader; 1], String> {
+pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mut Logs) -> Result<Shader, String> {
     // this does have to stay up to date with the number of shaders, but
     // since all the shaders do have to be loaded, it should be fine to assume the number of shaders
-    Ok([
+    Ok(
         {
             // wow, having the wrapper handle everything not only cleaned it up, but somehow I haven't gotten a single segfault yet
             let mut shader = Shader::new(&device, "shaders/shader.metal", &[
@@ -43,19 +43,19 @@ pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mu
             // loading the textures
             let mut total_textures_loaded_entities = 0;
             shader.update_buffer_slice(3, 
-                &get_texture_atlas::<TEXTURE_COUNT>(
+                &get_texture_atlas::<TEXTURE_COUNT, 64>(
                     "textures/entities/" , TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT], &mut total_textures_loaded_entities
                 )?
             )?; // entity_textures
             let mut total_textures_loaded_tiles = 0;
             shader.update_buffer_slice(4, 
-                &get_texture_atlas::<TEXTURE_COUNT>(
+                &get_texture_atlas::<TEXTURE_COUNT, 64>(
                     "textures/tiles/"    , TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT], &mut total_textures_loaded_tiles
                 )?
             )?; // tile_textures
             let mut total_textures_loaded_particles = 0;
             shader.update_buffer_slice(5, 
-                &get_texture_atlas::<TEXTURE_COUNT>(
+                &get_texture_atlas::<TEXTURE_COUNT, 64>(
                     "textures/particles/", TILE_SIZE, vec![[0u32; (TILE_SIZE.0 * TILE_SIZE.1) as usize]; TEXTURE_COUNT], &mut total_textures_loaded_particles
                 )?
             )?; // particle_textures
@@ -74,6 +74,6 @@ pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mu
 
             shader
         }
-    ])
+    )
 }
 

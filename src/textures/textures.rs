@@ -2,7 +2,7 @@
 // a basic error type to make error handling slightly cleaner
 #[derive(Debug)]
 pub struct TextureError {
-    details: String,
+    pub details: String,
 }
 
 impl From<TextureError> for String {
@@ -11,11 +11,12 @@ impl From<TextureError> for String {
     }
 }
 
-pub fn get_texture_atlas<const TEXTURE_COUNT: usize>(path: &str, tile_size: (u32, u32), mut textures: Vec<[u32; 64]>, total_textures_loaded: &mut usize) -> Result<Vec<[u32; 64]>, TextureError> {
+// the vector passed in should have the maximum texture count already allocated before passing it in or else this may panic at runtime
+pub fn get_texture_atlas<const TEXTURE_COUNT: usize, const RESULT_SIZE: usize>(path: &str, tile_size: (u32, u32), mut textures: Vec<[u32; RESULT_SIZE]>, total_textures_loaded: &mut usize) -> Result<Vec<[u32; RESULT_SIZE]>, TextureError> {
     // read through all png files in the directory
     // load each (splicing it by the tile size)
     // for each slice, if it's not empty, add it to the textures array
-    let entries = std::fs::read_dir(path).map_err(|e| TextureError { details: format!("Failed to read texture directory: {}", e) })?;
+    let entries = std::fs::read_dir(path).map_err(|e| TextureError { details: format!("Failed to read texture directory for {}: {}", path, e) })?;
     let mut texture_index = 1 ; // reserving 0 for empty texture
     
     // sorting so they are pulled in by a consistent order (before it was a pain to align them; adding a new texture would shift everything which isn't maintainable)
