@@ -55,12 +55,13 @@ impl WorldGenerator {
                 if cave_noise > cave_threshold_noise.get_noise_2d(x as f32, y as f32) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
                     if in_sky {
                         tile_map.sky_light[x] = y as u32;
-                        *tile_map.get_light_mut(x, y) = [250, 250, 250];
                     }
                     continue;
                 }
                 
-                // simple flat world for now
+                if in_sky {
+                    tile_map.sky_light[x] = y as u32;
+                }
                 if y == height {
                     in_sky = false;
                     *tile_map.get_tile_mut(x, y, 0) = 1;
@@ -70,10 +71,6 @@ impl WorldGenerator {
                 } else if y > height + dirt_depth {
                     in_sky = false;
                     *tile_map.get_tile_mut(x, y, 0) = 44; // stone
-                }
-                if in_sky {
-                    tile_map.sky_light[x] = y as u32;
-                    *tile_map.get_light_mut(x, y) = [250, 250, 250];
                 }
             }
         }

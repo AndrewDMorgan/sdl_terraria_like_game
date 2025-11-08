@@ -1,4 +1,3 @@
-
 use crate::game_manager::entities::player::player::CameraTransform;
 use crate::game_manager::game::GameError;
 use crate::game_manager::world::world_gen::WorldGenerator;
@@ -14,6 +13,18 @@ pub static SOLID_TILES: &[&[u32]] = &[
     DIRT_IDS,
     STONE_IDS,
 ];
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct EntityLight {
+    pub(crate) position: (f32, f32),
+    pub(crate) color: (u8, u8, u8, f32),
+}
+
+impl EntityLight {
+    pub fn new(position: (f32, f32), color: (u8, u8, u8, f32)) -> Self {
+        Self { position, color }
+    }
+}
 
 pub struct TileMapError {
     pub(crate) message: String,
@@ -44,6 +55,7 @@ pub struct TileMap {
     tiles: Vec<Vec<[u32; 3]>>,
     lighting: Vec<Vec<[u8; 3]>>,
     pub sky_light: Vec<u32>,
+    pub(crate) entity_lights: Vec<(String, EntityLight)>,
 }
 
 impl TileMap {
@@ -52,11 +64,22 @@ impl TileMap {
             tiles: vec![vec![[0; 3]; width]; height],
             lighting: vec![vec![[0; 3]; width]; height],
             sky_light: vec![height as u32; width],
+            entity_lights: Vec::new(),
         };
         if let Some(generator) = world_generator {
             generator.generate_tile_map(&mut tile_map)?;
         }
         Ok(tile_map)
+    }
+
+    pub fn add_entity_light(&mut self, name: String, position: (f32, f32), color: (u8, u8, u8, f32)) {
+        self.entity_lights.push((name, EntityLight::new(position, color)));
+    }
+
+    pub fn update_entity_light(&mut self, name: &str, position: (f32, f32), color: (u8, u8, u8, f32)) {
+        if let Some(light) = self.entity_lights.iter_mut().find(|(n, _)| n == name) {
+            light.1 = EntityLight::new(position, color);
+        }
     }
 
     pub fn get_tile_mut(&mut self, x: usize, y: usize, layer: usize) -> &mut u32 {
@@ -109,6 +132,7 @@ impl TileMap {
 
         let was_removed_light = TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(tile_x, tile_y as usize, 0));
 
+        let mut light_was_edited = false;
         *self.get_tile_mut(tile_x, tile_y, layer) = new_tile;
         if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(tile_x, tile_y as usize, 0)) {
             *self.get_light_mut(tile_x, tile_y as usize) = TILE_LIGHTS
@@ -119,70 +143,34 @@ impl TileMap {
                     message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles", tile_x, tile_y),
                     level: LoggingError::Error
                 })?.1;
+            light_was_edited = true;
         } else if was_removed_light {
-            //*self.get_light_mut(tile_x, tile_y) = [0, 0, 0];
             min_edit_height -= 8;
             max_edit_height += 8;
             edit_width = 8;
             for x_index in tile_x.saturating_sub(16)..(tile_x + 16).min(self.get_map_width() - 1) {
                 for y_index in (tile_y - 16)..(tile_y + 16).min(self.get_map_height()) {
-                    if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(x_index, y_index as usize, 0)) {
-                        *self.get_light_mut(x_index, y_index as usize) = TILE_LIGHTS
-                            .iter()
-                            .find(|(tile_id, _)| *tile_id == self
-                                .get_tile(x_index, y_index as usize, 0))
-                            .ok_or_else(|| TileMapError {
-                                message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles and removing light source", x_index, y_index),
-                                level: LoggingError::Error
-                            })?.1;
+                    if !TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(x_index, y_index as usize, 0)) {
+                        *self.get_light_mut(x_index, y_index as usize) = [0, 0, 0];
                         continue;
                     }
-                    let l;
-                    if self.sky_light[x_index] as usize >= y_index {
-                        l = 250;
-                    } else {
-                        l = 0;
-                    }
-                    *self.get_light_mut(x_index, y_index) = [l, l, l];
+                    *self.get_light_mut(x_index, y_index as usize) = TILE_LIGHTS
+                        .iter()
+                        .find(|(tile_id, _)| *tile_id == self
+                            .get_tile(x_index, y_index as usize, 0))
+                        .ok_or_else(|| TileMapError {
+                            message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles and removing light source", x_index, y_index),
+                            level: LoggingError::Error
+                        })?.1;
                 }
             }
+            light_was_edited = true;
         }
 
-        // updating the skylight
-        if tile_y <= self.sky_light[tile_x] as usize && SOLID_TILES.iter().any(|solid_ids| solid_ids.contains(&new_tile)) {
-            // Update sky_light if the new tile is solid and above the current sky_light
+        let is_solid = SOLID_TILES.iter().any(|solid_ids| solid_ids.contains(&new_tile));
+        if tile_y <= self.sky_light[tile_x] as usize && is_solid {
             self.sky_light[tile_x] = tile_y as u32;
-            if tile_y as u32 <= self.sky_light[tile_x] {
-                edit_width = 8;
-                for x_index in tile_x.saturating_sub(16)..(tile_x + 16).min(self.get_map_width() - 1) {
-                    for y_index in tile_y..self.get_map_height() {
-                        max_edit_height = max_edit_height.max(y_index);
-                        if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(x_index, y_index as usize, 0)) {
-                            *self.get_light_mut(x_index, y_index as usize) = TILE_LIGHTS
-                                .iter()
-                                .find(|(tile_id, _)| *tile_id == self
-                                    .get_tile(x_index, y_index as usize, 0))
-                                .ok_or_else(|| TileMapError {
-                                    message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles", x_index, y_index),
-                                    level: LoggingError::Error
-                                })?.1;
-                            continue;
-                        }
-                        let l;
-                        if self.sky_light[x_index] as usize > y_index {
-                            l = 250;
-                        } else {
-                            if self.get_light_mut(x_index, y_index).iter().map(|f| *f as usize).sum::<usize>() == 0 {
-                                break;
-                            }
-                            l = 0;
-                        }
-                        *self.get_light_mut(x_index, y_index) = [l, l, l];
-                    }
-                }
-            }
-        } else {
-            let old_sky_light = self.sky_light[tile_x];
+        } else if !is_solid {
             self.sky_light[tile_x] = self.tiles.iter().enumerate().find_map::<u32, _>(|(index, tiles)| {
                 if tiles[tile_x].iter()
                                 .any(|&tile| SOLID_TILES
@@ -192,36 +180,23 @@ impl TileMap {
                     Some(index as u32)
                 } else { None }
             }).unwrap_or(self.get_map_height() as u32);
-            max_edit_height = max_edit_height.max(self.sky_light[tile_x] as usize);
-            for y_index in old_sky_light..self.sky_light[tile_x] {
-                if TILE_LIGHTS.iter().any(|(tile_id, _)| *tile_id == self.get_tile(tile_x, y_index as usize, 0)) {
-                    *self.get_light_mut(tile_x, y_index as usize) = TILE_LIGHTS
-                        .iter()
-                        .find(|(tile_id, _)| *tile_id == self
-                            .get_tile(tile_x, y_index as usize, 0))
-                        .ok_or_else(|| TileMapError {
-                            message: format!("[Tilemap Error] Unable to locate light for tile at ({}, {}) while updating tiles", tile_x, y_index),
-                            level: LoggingError::Error
-                        })?.1;
-                    continue;
-                }
-                *self.get_light_mut(tile_x, y_index as usize) = [250, 250, 250];
-            }
         }
 
-        for _ in 0..16 {
-            for x in tile_x.saturating_sub(16 + edit_width)..(tile_x + 16 + edit_width).min(self.get_map_width() - 1) {
-                for y in min_edit_height.saturating_sub(16)..(max_edit_height + 16).min(self.get_map_height()) {
-                    let left = self.get_light_mut(x.saturating_sub(1), y).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
-                    let right = self.get_light_mut((x + 1).min(self.get_map_width() - 1), y).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
-                    let up = self.get_light_mut(x, y.saturating_sub(1)).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
-                    let down = self.get_light_mut(x, (y + 1).min(self.get_map_height() - 1)).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
-                    let self_light = self.get_light_mut(x, y);
-                    let light_level = left.iter()
-                        .enumerate()
-                        .map(|(i, f)| (*f).max(right[i].max(up[i].max(down[i].max(self_light[i])))))
-                        .collect::<Vec<u8>>();
-                    *self.get_light_mut(x, y) = [light_level[0], light_level[1], light_level[2]];
+        if light_was_edited {
+            for _ in 0..16 {
+                for x in tile_x.saturating_sub(16 + edit_width)..(tile_x + 16 + edit_width).min(self.get_map_width() - 1) {
+                    for y in min_edit_height.saturating_sub(16)..(max_edit_height + 16).min(self.get_map_height()) {
+                        let left = self.get_light_mut(x.saturating_sub(1), y).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
+                        let right = self.get_light_mut((x + 1).min(self.get_map_width() - 1), y).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
+                        let up = self.get_light_mut(x, y.saturating_sub(1)).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
+                        let down = self.get_light_mut(x, (y + 1).min(self.get_map_height() - 1)).iter().map(|f| f.saturating_sub(25)).collect::<Vec<u8>>();
+                        let self_light = self.get_light_mut(x, y);
+                        let light_level = left.iter()
+                            .enumerate()
+                            .map(|(i, f)| (*f).max(right[i].max(up[i].max(down[i].max(self_light[i])))))
+                            .collect::<Vec<u8>>();
+                        *self.get_light_mut(x, y) = [light_level[0], light_level[1], light_level[2]];
+                    }
                 }
             }
         }
@@ -349,6 +324,7 @@ impl TileMap {
         } Ok(())
     }
 
+    // todo! fix the bug here that happens when zooming where the tiles jump around a bit, not sure where it is tbh
     pub fn get_render_slice(&self, camera_transform: &CameraTransform, window_size: (u32, u32)) -> (Vec<[u64; 4]>, CameraTransform, (u32, u32)) {
         // don't even try to read this or the math, it's a mess, but seems to work for now
         
@@ -377,14 +353,44 @@ impl TileMap {
         let mut visible_tiles: Vec<[u64; 4]> = Vec::with_capacity(((end_y - start_y) * (end_x - start_x)).max(0).min(1024 * 1024));
         for y in start_y..end_y {
             for x in start_x..end_x {
+                let mut light = [self.lighting[y][x][0], self.lighting[y][x][1], self.lighting[y][x][2]];
+                // going through entity lights and modifying it based on those
+                for (_ident, light_obj) in &self.entity_lights {
+                    let dif_x = light_obj.position.0 - (x as f32 * 8.0 + 4.0);
+                    let dif_y = light_obj.position.1 - (y as f32 * 8.0 + 4.0);
+                    if dif_x.abs() > 100.0 || dif_y.abs() > 100.0 { continue; }  // the light strength would be 0
+                    let distance = (dif_x * dif_x + dif_y * dif_y) * 0.00025;
+                    let light_strength = (light_obj.color.3 - distance).max(0.0);
+                    light = [
+                        light[0].max((light_obj.color.0 as f32 * light_strength) as u8),
+                        light[1].max((light_obj.color.1 as f32 * light_strength) as u8),
+                        light[2].max((light_obj.color.2 as f32 * light_strength) as u8),
+                    ];
+                }
+                
+                // computing the light contribution from the sky
+                let mut sky_light = 0;
+                for x_offset in (-10isize)..10isize {
+                    let sky_light_new = 10usize.saturating_sub(y.saturating_sub(self.sky_light[(x as isize + x_offset).max(0) as usize] as usize));
+                    let sky_light_new = ((sky_light_new as f32 / 10.0 * 255.0) as u8).saturating_sub((x_offset.abs() as f32 * (255.0 / 10.0)) as u8);
+                    sky_light = sky_light.max(sky_light_new);
+                }
+
+                // getting the final lighting for the location
+                light = [
+                    light[0].max(sky_light),
+                    light[1].max(sky_light),
+                    light[2].max(sky_light),
+                ];
+
                 visible_tiles.push([
                     self.tiles[y][x][0] as u64,
                     self.tiles[y][x][1] as u64,
                     self.tiles[y][x][2] as u64,
                     (
-                        self.lighting[y][x][0] as u32 |
-                        ((self.lighting[y][x][1] as u32) << 8) |
-                        ((self.lighting[y][x][2] as u32) << 16)
+                        light[0] as u32 |
+                        ((light[1] as u32) << 8) |
+                        ((light[2] as u32) << 16)
                     ) as u64,
                 ]);
             }

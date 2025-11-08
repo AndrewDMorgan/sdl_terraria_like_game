@@ -78,10 +78,10 @@ impl Player {
             },
             entity: Entity {
                 sprite: Sprite::new_animated((8.0, 14.0), (-8.0, -9.0), vec![2, 2, 2], Hitbox {
-                    offset: (-8.0, -9.0),
+                    offset: (-12.0, -9.0),
                     size: (8.0, 14.0),
                 }, Animator::new(vec![vec![0]], vec![0.0])),
-                position: (-20.0, 115.0 * 8.0),
+                position: (0.0, 115.0 * 8.0),  // this should be on the edge of the map, but it's not, so that's an issue that needs addressing and probably relates to the zooming bug
             },
             player_data: PlayerData {
                 inventory: Inventory::new(),
@@ -102,17 +102,18 @@ impl Player {
 
     fn move_player(&mut self, delta_x: f32, delta_y: f32, tile_map: &tile_map::TileMap) {
         // trying to do a smoother collision detection by splitting the movement into many steps
+        let hitbox = self.entity.sprite.get_hitbox();
         for _ in 0..100 {
             let new_x = self.entity.position.0 + delta_x * 0.01;
             let new_y = self.entity.position.1 + delta_y * 0.01;
 
-            if tile_map.check_aabb_collision(new_x - 8.0, new_y - 9.0, 8.0, 14.0) {
+            if tile_map.check_aabb_collision(new_x + hitbox.offset.0 as f32, new_y + hitbox.offset.1 as f32, hitbox.size.0 as f32, hitbox.size.1 as f32) {
                 if delta_x != 0.0 && delta_y.abs() <= 0.01 {
                     let mut jumped = false;
                     // trying to jump up the block if it's 1 high
                     for y in 1..=16 {
                         let test_y = new_y - y as f32 * 0.5;
-                        if !tile_map.check_aabb_collision(new_x - 8.0, test_y - 9.0, 8.0, 14.0) {
+                        if !tile_map.check_aabb_collision(new_x + hitbox.offset.0 as f32, test_y + hitbox.offset.1 as f32, hitbox.size.0 as f32, hitbox.size.1 as f32) {
                             self.entity.position.0 = new_x;
                             self.entity.position.1 = test_y;
                             jumped = true;
@@ -128,7 +129,16 @@ impl Player {
         }
     }
 
-    pub fn update_key_events(&mut self, timer: &Timer, event_handler: &EventHandler, tile_map: &mut tile_map::TileMap, screen_size: (u32, u32), ui_manager: &mut PlayerUiManager, entity_manager: &mut EntityManager) -> Result<(), GameError> {
+    pub fn update_key_events(
+        &mut self,
+        timer: &Timer,
+        event_handler: &EventHandler,
+        tile_map: &mut tile_map::TileMap,
+        screen_size: (u32, u32),
+        ui_manager: &mut PlayerUiManager,
+        entity_manager: &mut EntityManager,
+        rand_state: &mut dyn rand::RngCore,
+    ) -> Result<(), GameError> {
         self.entity.sprite.update_frame(timer.delta_time);  // this is the best place to do this ig
 
         self.player_data.inventory.update_key_events(timer, event_handler, tile_map, screen_size, &self.key_bindings, ui_manager)?;
@@ -147,6 +157,14 @@ impl Player {
             self.move_player(0.0, -200.0 * timer.delta_time as f32, tile_map);
         }
 
+        if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Z) {
+            if event_handler.mods_held.contains(&sdl2::keyboard::Mod::LALTMOD) {
+                self.camera.zoom += 0.075 * timer.delta_time as f32;
+            } else {
+                self.camera.zoom -= 0.075 * timer.delta_time as f32;
+            }
+        }
+
         // tempory tile deletion
         if let ButtonState::Pressed | ButtonState::Held = event_handler.mouse.left {
             let mouse_x = self.camera.x - screen_size.0 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.0 as f32 * self.camera.zoom;
@@ -154,7 +172,7 @@ impl Player {
             let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
             let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
             if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
-                self.player_data.inventory.left_click_item(tile_x, tile_y, tile_map, event_handler, ui_manager, entity_manager)?;
+                self.player_data.inventory.left_click_item(tile_x, tile_y, tile_map, event_handler, ui_manager, entity_manager, rand_state)?;
             }
         }
         if let ButtonState::Pressed | ButtonState::Held = event_handler.mouse.right {
@@ -179,6 +197,10 @@ impl Player {
             10.0 * timer.delta_time as f32,
         );
 
+        if let Some(entity_light) = tile_map.entity_lights.iter_mut().find(|(ident,_)| &**ident == "Player") {
+            entity_light.1.position = (self.entity.position.0 - 4.0, self.entity.position.1 - 4.0);
+        }
+
         Ok(())
     }
     
@@ -190,37 +212,37 @@ impl Player {
         vec![  // todo! move the sprite indexing into the sprite struct and animator
             (
                 self.entity.sprite.get_texture() + 1, 0,
-                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 - 400,
+                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 - 800,
                 ((self.entity.position.1 - self.camera.y) * 100.0) as i16 - 800,
                 0, 15,
             ),
             (
                 self.entity.sprite.get_texture() + 2, 0,
-                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 + 400,
+                ((self.entity.position.0 - self.camera.x) * 100.0) as i16,
                 ((self.entity.position.1 - self.camera.y) * 100.0) as i16 - 800,
                 0, 15,
             ),
             (
                 self.entity.sprite.get_texture() + 3, 0,
-                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 - 400,
+                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 - 800,
                 ((self.entity.position.1 - self.camera.y) * 100.0) as i16,
                 0, 15,
             ),
             (
                 self.entity.sprite.get_texture() + 4, 0,
-                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 + 400,
+                ((self.entity.position.0 - self.camera.x) * 100.0) as i16,
                 ((self.entity.position.1 - self.camera.y) * 100.0) as i16,
                 0, 15,
             ),
             (
                 self.entity.sprite.get_texture() + 5, 0,
-                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 - 400,
+                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 - 800,
                 ((self.entity.position.1 - self.camera.y) * 100.0) as i16 + 800,
                 0, 15,
             ),
             (
                 self.entity.sprite.get_texture() + 6, 0,
-                ((self.entity.position.0 - self.camera.x) * 100.0) as i16 + 400,
+                ((self.entity.position.0 - self.camera.x) * 100.0) as i16,
                 ((self.entity.position.1 - self.camera.y) * 100.0) as i16 + 800,
                 0, 15,
             ),

@@ -1,22 +1,38 @@
-use crate::game_manager::{entities::{manager::{EntityManager, ItemDrop}, player::{font_rendering::render_font_unifont, items::{Item, ItemType, ToolType}, player::{KeyBindings, PlayerData}, player_ui::PlayerUiManager}}, game::GameError, world::tile_map};
+use crate::game_manager::{entities::{manager::{EntityManager, ItemDrop}, player::{font_rendering::render_font_unifont, items::{Item, ItemGenerator, ItemType, ToolType}, player::{KeyBindings, PlayerData}, player_ui::PlayerUiManager}}, game::GameError, world::tile_map};
 use crate::core::{event_handling::event_handler::EventHandler, rendering::ui::{UiElement, UiError}, timer::Timer};
 use std::rc::Rc;
 
-pub static TILE_DROPS: &[TileDrop] = &[];
+use rand::Rng;
+
+pub static TILE_DROPS: &[TileDrop] = &[
+    TileDrop {
+        parent_tile: 1,
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 1, Some(ItemType::Block(1)), "Dirt")],
+        droped_textures: &[7],
+    },
+];
 
 pub struct TileDrop {
     parent_tile: u32,
-    drops_tiles: &'static [u32],
+    drop_chances: &'static [f32],
+    drops_items: &'static [ItemGenerator],  // the id of the item (could really be any u32, hopefully this won't require sequential ids so that in theory additions are easy and safe)
     droped_textures: &'static [u32],
 }
 
 impl TileDrop {
-    pub const fn new(parent_tile: u32, drops_tiles: &'static [u32], droped_textures: &'static [u32]) -> Self {
-        Self { parent_tile, drops_tiles, droped_textures }
+    pub const fn new(parent_tile: u32, drop_chances: &'static [f32], drops_items: &'static [ItemGenerator], droped_textures: &'static [u32]) -> Self {
+        Self { parent_tile, drop_chances, drops_items, droped_textures }
     }
 
-    pub fn get_dropped_tile_info(&self) -> (u32, u32) {
-        (self.drops_tiles[0], self.droped_textures[0])  // todo! actually add chance and stuff to this at some point
+    // (item, texture id)
+    pub fn get_dropped_tile_info(&self, rand_state: &mut dyn rand::RngCore) -> Vec<(Item, u32)> {
+        let mut dropped_tiles = Vec::new();
+        for (i, chance) in self.drop_chances.iter().enumerate() {
+            if rand_state.random_range::<f32, _>(0.0..1.0) < *chance {
+                dropped_tiles.push((self.drops_items[i].generate_new(rand_state), self.droped_textures[i]));
+            }
+        } dropped_tiles
     }
 }
 
@@ -55,7 +71,8 @@ impl Inventory {
         tile_map: &mut tile_map::TileMap,
         event_handler: &EventHandler,
         ui_manager: &mut PlayerUiManager,
-        entity_manager: &mut EntityManager
+        entity_manager: &mut EntityManager,
+        rand_state: &mut dyn rand::RngCore
     ) -> Result<(), GameError> {
         let inventory_open = ui_manager.ui_elements.iter().any(|e| e.identifier == "Inventory");
         if inventory_open && self.clicked_inventory(event_handler.mouse.position) { return Ok(()); }
@@ -64,7 +81,10 @@ impl Inventory {
                 let tile = tile_map.get_tile(tile_x, tile_y, 0);
                 let tile_texture_id = TILE_DROPS.iter().find(|tile_drop| tile_drop.parent_tile == tile);
                 if let Some(tile) = tile_texture_id {
-                    entity_manager.new_drop(ItemDrop::Tile(tile.get_dropped_tile_info().1), ((tile_x + 1) * 8 + 2) as u32, ((tile_y + 1) * 8 + 2) as u32);
+                    let drops = tile.get_dropped_tile_info(rand_state);
+                    for drop in drops {
+                        entity_manager.new_drop(ItemDrop::Tile(drop.1), ((tile_x + 1) * 8 + 2) as u32, ((tile_y + 1) * 8 + 2) as u32);
+                    }
                 }
                 tile_map.change_tile(tile_x, tile_y, 0, 0)?;
             },

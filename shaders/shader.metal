@@ -238,6 +238,10 @@ kernel void ComputeShader (
 
     uint index = gid.y * pitch + gid.x * 3;
 
+    if (gid.x == width / 2 || gid.y == height / 2) {
+        color = float3(0., 0., 0.);
+    }
+
     /*if (gid.x == width / 2) {
         color = float3(0., 0., 0.);
     }*/

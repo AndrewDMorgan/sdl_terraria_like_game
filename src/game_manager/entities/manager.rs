@@ -34,7 +34,7 @@ impl EntityManager {
             }
         } render_data
     }
-
+    
     pub fn get_entity_count(&self) -> usize {
         self.drops.len()
     }

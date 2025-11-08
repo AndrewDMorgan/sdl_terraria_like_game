@@ -19,6 +19,8 @@ pub struct Game {
     player_ui_manager: PlayerUiManager,  // storing this external to player since it can't be saved (and really doesn't need to be)
 
     pub(crate) entity_manager: EntityManager,
+
+    pub(crate) random_state: rand::rngs::ThreadRng,
 }
 
 impl Game {
@@ -84,6 +86,7 @@ impl Game {
                 severity: Severity::Fatal
             })?,
             entity_manager: entity,
+            random_state: rand::rng(),
         })
     }
 
@@ -95,6 +98,9 @@ impl Game {
             Dimension::Overworld,
             TileMap::new(4095, 256, Some(&world_generator))?
         );
+        tile_map_manager.get_current_map(Dimension::Overworld)
+            .ok_or_else(|| GameError { message: String::from("Failed to get current map"), severity: Severity::Fatal })?
+            .add_entity_light(String::from("Player"), (0.0, 0.0), (225, 225, 128, 0.65));
         Ok(Game {
             player: Player::new(),
             tile_map: tile_map_manager,
@@ -116,6 +122,7 @@ impl Game {
                 severity: Severity::Fatal
             })?,
             entity_manager: EntityManager::new(),
+            random_state: rand::rng(),
         })
     }
 
@@ -125,7 +132,15 @@ impl Game {
         screen_size: (u32, u32),
     ) -> Result<(), GameError> {
         if let Some(tile_map) = self.tile_map.get_current_map(Dimension::Overworld) {
-            self.player.update_key_events(timer, event_handler, tile_map, screen_size, &mut self.player_ui_manager, &mut self.entity_manager)?;
+            self.player.update_key_events(
+                timer,
+                event_handler,
+                tile_map,
+                screen_size,
+                &mut self.player_ui_manager,
+                &mut self.entity_manager,
+                &mut self.random_state,
+            )?;
         } Ok(())
     }
 
