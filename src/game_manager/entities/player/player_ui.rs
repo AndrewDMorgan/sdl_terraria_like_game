@@ -7,10 +7,10 @@ static MAX_FONT_CHARACTERS: usize = u16::MAX as usize;
 
 #[derive(Default)]
 pub struct PlayerUiManager {
-    ui_elements: Vec<UiElement<PlayerData>>,
+    pub ui_elements: Vec<UiElement<PlayerData>>,
     // this is an rc so that it can be passed into a ui renderer closure without issue (anyway, it's constant and doesn't change after initialization)
-    item_textures: Rc<Vec<[u32; 256]>>,
-    text_character_atlas: Rc<Vec<[u32; 256]>>,
+    pub item_textures: Rc<Vec<[u32; 256]>>,
+    pub text_character_atlas: Rc<Vec<[u32; 256]>>,
 }
 
 impl PlayerUiManager {

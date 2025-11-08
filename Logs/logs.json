@@ -1,20 +1,33 @@
-[
-  [
+{
+  "logs": [
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 35.966542, Events: 14.517, Create Surface: 0.229, [ GPU Draw: 12.714 ; Event Handling: 0.588 ], Create Texture: 6.588, Render Texture: 0.008, Present: 1.911"
+      "message": "Loaded 4 item textures.",
+      "level": "Info"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 42.273374999999994, Events: 38.434, Create Surface: 0.268, [ GPU Draw: 1.525 ; Event Handling: 0.676 ], Create Texture: 1.627, Render Texture: 0.002, Present: 0.418"
+      "message": "Loaded 12784 font characters for the player ui rendering.",
+      "level": "Info"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 19.999083000000002, Events: 17.579, Create Surface: 0.153, [ GPU Draw: 0.802 ; Event Handling: 0.109 ], Create Texture: 1.371, Render Texture: 0.001, Present: 0.093"
+      "message": "Loaded 6 entity textures, 88 tile textures, and 0 particle textures into the GPU.",
+      "level": "Info"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 17.333041999999963, Events: 0.031, Create Surface: 0.265, [ GPU Draw: 1.604 ; Event Handling: 0.335 ], Create Texture: 1.417, Render Texture: 0.001, Present: 14.014"
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 50.983, Events: 29.654, [ GPU Draw: 14.860 ; Buffer Upload: 0.723, Shader Render: 12.346, Ui Rendering: 0.024 Event Handling: 0.001 ], Render Texture: 14.949, Present: 6.380",
+      "level": "Warning"
     },
     {
-      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 39.84404199999992, Events: 36.593, Create Surface: 0.148, [ GPU Draw: 1.559 ; Event Handling: 0.128 ], Create Texture: 1.456, Render Texture: 0.002, Present: 0.087"
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 140.742, Events: 137.749, [ GPU Draw: 2.522 ; Buffer Upload: 0.101, Shader Render: 1.460, Ui Rendering: 0.024 Event Handling: 0.001 ], Render Texture: 2.524, Present: 0.468",
+      "level": "Warning"
+    },
+    {
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 20.259, Events: 0.054, [ GPU Draw: 2.363 ; Buffer Upload: 0.058, Shader Render: 1.302, Ui Rendering: 0.022 Event Handling: 0.000 ], Render Texture: 2.364, Present: 17.841",
+      "level": "Warning"
+    },
+    {
+      "message": "[Performance Warning] Frame took too long ( > 16.67ms  i.e.  < 60fps ).\nFrame timings (ms): Everything: 18.220, Events: 0.289, [ GPU Draw: 2.142 ; Buffer Upload: 0.082, Shader Render: 1.157, Ui Rendering: 0.027 Event Handling: 0.001 ], Render Texture: 2.143, Present: 15.788",
+      "level": "Warning"
     }
   ],
-  false
-]
+  "updated": false
+}

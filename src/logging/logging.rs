@@ -29,14 +29,24 @@ pub struct Log {
     pub level: LoggingError,
 }
 
-// wraps the Log into a vector, but alliased to allow serialization
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct Logs(pub Vec<Log>, pub bool);
+struct LogsSerializable {
+    pub logs: Vec<Log>,
+    pub updated: bool,
+}
+
+// wraps the Log into a vector, but alliased to allow serialization
+pub struct Logs(LogsSerializable, crossbeam::channel::Receiver<bool>);
+
 impl Logs {
+    pub fn new(channel: crossbeam::channel::Receiver<bool>) -> Self {
+        Self(LogsSerializable { logs: Vec::new(), updated: false }, channel)
+    }
+
     /// Checks if the logs were updated since the last check
     pub fn was_updated(&mut self) -> bool {
-        if self.1 {
-            self.1 = false;
+        if self.0.updated {
+            self.0.updated = false;
             true
         } else {
             false
@@ -45,13 +55,13 @@ impl Logs {
 
     /// Adds a new log entry and marks the logs as updated
     pub fn push(&mut self, log: Log) {
-        self.0.push(log);
-        self.1 = true;
+        self.0.logs.push(log);
+        self.0.updated = true;
     }
 
     /// Saves the current logs to the logs file in JSON format
     pub fn save(&self) -> Result<(), String> {
-        let log_json = serde_json::to_string_pretty(self)
+        let log_json = serde_json::to_string_pretty(&self.0)
             .map_err(|e| e.to_string())?;
         std::fs::write(LOGS_PATH, log_json)
             .map_err(|e| e.to_string())?;
@@ -61,8 +71,18 @@ impl Logs {
 
 impl Drop for Logs {
     fn drop(&mut self) {
-        if self.1 { self.save().unwrap(); }
-        println!("{:?}", self.0.iter().filter(|log| {
+        // the main execution ended before being able to signal an end, meaning a fatal and non-unwinding error happened
+        // this could be something like an array access out of bounds, or some other non-unwinding error, as they don't return a result or information
+        // to the std catch_unwind. This at least should provide the information that something of that nature happened, as, unfortunately,
+        // other information isn't sent when this happens, and I don't think it's possible to get further info on the exact error
+        if self.1.try_recv().is_err() {
+            self.0.logs.push(Log {
+                message: format!("[Uncaught] Fatal Error: error didn't unwind, and wasn't caught"), level: LoggingError::Error
+            });
+        }
+
+        if self.0.updated { self.save().unwrap(); }
+        println!("{:?}", self.0.logs.iter().filter(|log| {
             match log.level {
                 LoggingError::Error => true,
                 _ => false,

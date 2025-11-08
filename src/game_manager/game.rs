@@ -37,7 +37,7 @@ impl Game {
                 let reader = std::io::BufReader::new(data);
                 Ok(serde_json::from_reader::<_, T>(reader).map_err(|e| {
                     GameError {
-                        message: format!("Failed to deserialize file: {}", path),
+                        message: format!("Failed to deserialize file: {}\nError: {:?}", path, e),
                         severity: Severity::Fatal,
                     }
                 })?)
@@ -114,7 +114,7 @@ impl Game {
         screen_size: (u32, u32),
     ) -> Result<(), GameError> {
         if let Some(tile_map) = self.tile_map.get_current_map(Dimension::Overworld) {
-            self.player.update_key_events(timer, event_handler, tile_map, screen_size)?;
+            self.player.update_key_events(timer, event_handler, tile_map, screen_size, &mut self.player_ui_manager)?;
         } Ok(())
     }
 

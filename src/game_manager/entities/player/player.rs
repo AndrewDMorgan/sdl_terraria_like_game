@@ -30,6 +30,30 @@ impl From<u8> for PlayerAnimation {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+pub struct KeyBindings {
+    pub inventory: Vec<KeyBind>,
+    pub left: Vec<KeyBind>,
+    pub right: Vec<KeyBind>,
+    pub jump: Vec<KeyBind>,
+    pub down: Vec<KeyBind>,
+}
+
+impl KeyBindings {
+    pub fn check_true(binding: &Vec<KeyBind>, raw_keys: &Vec<i32>, key_mods: &Vec<sdl2::keyboard::Mod>) -> bool {
+        binding.iter().any(|k| match k {
+            KeyBind::Key(key) => raw_keys.contains(key),
+            KeyBind::Mod(mods) => key_mods.iter().any(|m| m.bits() == *mods),
+        })
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum KeyBind {
+    Key(i32),
+    Mod(u16),
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct PlayerData {
     pub inventory: Inventory,
 }
@@ -40,9 +64,7 @@ pub struct Player {
     pub camera: CameraTransform,
     pub entity: Entity<PlayerAnimation>,
     player_data: PlayerData,
-
-    // todo! move the player model into an 'Entity' struct later that'll manage entities
-    // this should remove some of the dependencies that have been injected into here
+    key_bindings: KeyBindings,
 }
 
 impl Player {
@@ -62,6 +84,13 @@ impl Player {
             },
             player_data: PlayerData {
                 inventory: Inventory::new(),
+            },
+            key_bindings: KeyBindings {
+                inventory: vec![KeyBind::Key(*sdl2::keyboard::Keycode::E)],
+                left: vec![KeyBind::Key(*sdl2::keyboard::Keycode::A)],
+                right: vec![KeyBind::Key(*sdl2::keyboard::Keycode::D)],
+                jump: vec![KeyBind::Key(*sdl2::keyboard::Keycode::W)],
+                down: vec![KeyBind::Mod(sdl2::keyboard::Mod::LSHIFTMOD.bits()), KeyBind::Key(*sdl2::keyboard::Keycode::S)],
             },
         }
     }
@@ -98,19 +127,22 @@ impl Player {
         }
     }
 
-    pub fn update_key_events(&mut self, timer: &Timer, event_handler: &EventHandler, tile_map: &mut tile_map::TileMap, screen_size: (u32, u32)) -> Result<(), GameError> {
+    pub fn update_key_events(&mut self, timer: &Timer, event_handler: &EventHandler, tile_map: &mut tile_map::TileMap, screen_size: (u32, u32), ui_manager: &mut PlayerUiManager) -> Result<(), GameError> {
         self.entity.sprite.update_frame(timer.delta_time);  // this is the best place to do this ig
 
-        if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Right) {
+        self.player_data.inventory.update_key_events(timer, event_handler, tile_map, screen_size, &self.key_bindings, ui_manager)?;
+
+        let raw_keys_held = event_handler.keys_held.iter().map(|k| **k).collect::<Vec<_>>();
+        if KeyBindings::check_true(&self.key_bindings.right, &raw_keys_held, &event_handler.mods_held) {
             self.move_player(200.0 * timer.delta_time as f32, 0.0, tile_map);
         }
-        if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Left) {
+        if KeyBindings::check_true(&self.key_bindings.left, &raw_keys_held, &event_handler.mods_held) {
             self.move_player(-200.0 * timer.delta_time as f32, 0.0, tile_map);
         }
-        if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Down) {
+        if KeyBindings::check_true(&self.key_bindings.down, &raw_keys_held, &event_handler.mods_held) {
             self.move_player(0.0, 200.0 * timer.delta_time as f32, tile_map);
         }
-        if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Up) {
+        if KeyBindings::check_true(&self.key_bindings.jump, &raw_keys_held, &event_handler.mods_held) {
             self.move_player(0.0, -200.0 * timer.delta_time as f32, tile_map);
         }
 
@@ -121,17 +153,17 @@ impl Player {
             let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
             let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
             if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
-                tile_map.change_tile(tile_x, tile_y, 0, 0)?;
+                self.player_data.inventory.left_click_item(tile_x, tile_y, tile_map)?;
             }
         }
         if let ButtonState::Pressed | ButtonState::Held = event_handler.mouse.right {
-                let mouse_x = self.camera.x - screen_size.0 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.0 as f32 * self.camera.zoom;
-                let mouse_y = self.camera.y - screen_size.1 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.1 as f32 * self.camera.zoom;
-                let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
-                let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
-                if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
-                    tile_map.change_tile(tile_x, tile_y, 0, 88)?;
-                }
+            let mouse_x = self.camera.x - screen_size.0 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.0 as f32 * self.camera.zoom;
+            let mouse_y = self.camera.y - screen_size.1 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.1 as f32 * self.camera.zoom;
+            let tile_x = (mouse_x / 8.0 - 1.0).floor() as usize;
+            let tile_y = (mouse_y / 8.0 - 0.5).floor() as usize;
+            if tile_x < tile_map.get_map_width() && tile_y < tile_map.get_map_height() {
+                self.player_data.inventory.right_click_item(tile_x, tile_y, tile_map)?;
+            }
         }
         
         // smooth camera movement!

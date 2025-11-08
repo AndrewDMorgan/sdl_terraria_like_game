@@ -17,14 +17,16 @@ pub struct UiElement<T> {
     position: (usize, usize),
     size: (usize, usize),
     renderer: Box<dyn Fn(&mut [u8], ((u32, u32), usize), &mut T, ((usize, usize), (usize, usize))) -> Result<(), UiError>>,
+    pub identifier: String,
 }
 
 impl<T> UiElement<T> {
-    pub fn new(position: (usize, usize), size: (usize, usize), renderer: Box<dyn Fn(&mut [u8], ((u32, u32), usize), &mut T, ((usize, usize), (usize, usize))) -> Result<(), UiError>>) -> Self {
+    pub fn new(identifier: String, position: (usize, usize), size: (usize, usize), renderer: Box<dyn Fn(&mut [u8], ((u32, u32), usize), &mut T, ((usize, usize), (usize, usize))) -> Result<(), UiError>>) -> Self {
         Self {
             position,
             size,
             renderer,
+            identifier
         }
     }
 

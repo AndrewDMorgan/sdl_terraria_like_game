@@ -110,32 +110,38 @@ kernel void ComputeShader (
             uint tile_index = x_coord + y_coord * tile_map_width;
             uint offset = (uint(px_zoomed) % 8) + (uint(py_zoomed) % 8) * 8;
             
-            // interpolating the light
-            float3 top_left     = ToColor(tile_map[(x_coord + y_coord * tile_map_width) * 4 + 3]);
-            float3 top_right    = ToColor(tile_map[(x_coord + 1 + y_coord * tile_map_width) * 4 + 3]);
-            float3 bottom_left  = ToColor(tile_map[(x_coord + (y_coord + 1) * tile_map_width) * 4 + 3]);
-            float3 bottom_right = ToColor(tile_map[(x_coord + 1 + (y_coord + 1) * tile_map_width) * 4 + 3]);
-            float interp_x = metal::pow(metal::fract(px_fract), 2.0);
-            float interp_y = metal::pow(metal::fract(py_fract), 2.0);
-            float3 light_color_1 = lerp_f3(
-                lerp_f3(top_left, top_right, interp_x),
-                lerp_f3(bottom_left, bottom_right, interp_x),
-                interp_y
-            );
+            // interpolating the light (if defined)
+            #define INTERPOLATE_LIGHT
+            #ifdef INTERPOLATE_LIGHT
+                float3 top_left     = ToColor(tile_map[(x_coord + y_coord * tile_map_width) * 4 + 3]);
+                float3 top_right    = ToColor(tile_map[(x_coord + 1 + y_coord * tile_map_width) * 4 + 3]);
+                float3 bottom_left  = ToColor(tile_map[(x_coord + (y_coord + 1) * tile_map_width) * 4 + 3]);
+                float3 bottom_right = ToColor(tile_map[(x_coord + 1 + (y_coord + 1) * tile_map_width) * 4 + 3]);
+                float interp_x = metal::pow(metal::fract(px_fract), 2.0);
+                float interp_y = metal::pow(metal::fract(py_fract), 2.0);
+                float3 light_color_1 = lerp_f3(
+                    lerp_f3(top_left, top_right, interp_x),
+                    lerp_f3(bottom_left, bottom_right, interp_x),
+                    interp_y
+                );
 
-            // interpolating the light
-            top_right    = ToColor(tile_map[(x_coord - 1 + y_coord * tile_map_width) * 4 + 3]);
-            bottom_left  = ToColor(tile_map[(x_coord + (y_coord - 1) * tile_map_width) * 4 + 3]);
-            bottom_right = ToColor(tile_map[(x_coord - 1 + (y_coord - 1) * tile_map_width) * 4 + 3]);
-            interp_x = metal::pow(1.0 - metal::fract(px_fract), 2.0);
-            interp_y = metal::pow(1.0 - metal::fract(py_fract), 2.0);
-            float3 light_color_2 = lerp_f3(
-                lerp_f3(top_left, top_right, interp_x),
-                lerp_f3(bottom_left, bottom_right, interp_x),
-                interp_y
-            );
-            light_color = (light_color_1 + light_color_2) * 0.5;
-            color *= light_color;
+                // interpolating the light
+                top_right    = ToColor(tile_map[(x_coord - 1 + y_coord * tile_map_width) * 4 + 3]);
+                bottom_left  = ToColor(tile_map[(x_coord + (y_coord - 1) * tile_map_width) * 4 + 3]);
+                bottom_right = ToColor(tile_map[(x_coord - 1 + (y_coord - 1) * tile_map_width) * 4 + 3]);
+                interp_x = metal::pow(1.0 - metal::fract(px_fract), 2.0);
+                interp_y = metal::pow(1.0 - metal::fract(py_fract), 2.0);
+                float3 light_color_2 = lerp_f3(
+                    lerp_f3(top_left, top_right, interp_x),
+                    lerp_f3(bottom_left, bottom_right, interp_x),
+                    interp_y
+                );
+                light_color = (light_color_1 + light_color_2) * 0.5;
+                color *= light_color;
+            #else
+                light_color = ToColor(tile_map[(x_coord + y_coord * tile_map_width) * 4 + 3]);
+                color *= light_color;
+            #endif
             
             // going through the 3 layers ( the first is the forground )
             for (int i = 2; i >= 0; i--) {

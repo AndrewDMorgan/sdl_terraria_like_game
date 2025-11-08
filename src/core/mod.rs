@@ -141,6 +141,12 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         // the gpu is fast, but data moves between the gpu and cpu slowly
         let mut elapsed_for_event_handling = 0.0;
         let mut start_of_event_handling = 0.0;
+        let mut shader_render_pass_time_start = 0.0;
+        let mut shader_render_pass_time_end = 0.0;
+        let mut ui_rendering_time_start = 0.0;
+        let mut ui_rendering_time_end = 0.0;
+        let mut buffer_upload_start = 0.0;
+        let mut buffer_upload_end = 0.0;
         let mut updating_error: Result<(), GameError> = Ok(());
         let buffer_result: Result<(), ShaderError> = surface_texture.with_lock(None, |pixels, pitch| {
             let grid_size = MTLSize {
@@ -153,7 +159,9 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 height: 16,
                 depth: 1,
             };
-            
+
+            buffer_upload_start = timer.elapsed_frame().as_secs_f64();
+
             let shader = shader_handler.get_shader(shader_handler::ShaderContext::GameLoop);
             shader.update_buffer(0, pitch as u64)?;
             shader.update_buffer(1, window_size.0 as u64)?;
@@ -242,6 +250,10 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             }
 
             shader.update_buffer_slice(18, pixels)?;
+
+            buffer_upload_end = timer.elapsed_frame().as_secs_f64();
+            shader_render_pass_time_start = timer.elapsed_frame().as_secs_f64();
+
             updating_error = shader.execute(
                 grid_size,
                 threadgroup_size,
@@ -262,12 +274,17 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             let out_slice = unsafe { std::slice::from_raw_parts(out_ptr, pixels.len()) };
             pixels.copy_from_slice(out_slice);
 
+            shader_render_pass_time_end = timer.elapsed_frame().as_secs_f64();
+            ui_rendering_time_start = timer.elapsed_frame().as_secs_f64();
+
             // rendering ui stuff
             game.render_ui(pixels, window_size, pitch).map_err(|e| {
                 ShaderError::new(
                     format!("[Ui Error] Error while rendering ui: {:?}", e)
                 )
             })?;
+
+            ui_rendering_time_end = timer.elapsed_frame().as_secs_f64();
             
             Ok(())
         })?;
@@ -321,7 +338,22 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             let t6 = elapsed_for_event_handling - start_of_event_handling;
             let t4 = elapsed_for_rendering_texture - elapsed_for_events;
             let t5 = elapsed_for_presenting - elapsed_for_rendering_texture;
-            let text = format!("Frame timings (ms): Everything: {:.3}, Events: {:.3}, [ GPU Draw: {:.3} ; Event Handling: {:.3} ], Render Texture: {:.3}, Present: {:.3}", timer.delta_time * 1000.0, t0 * 1000.0, t2 * 1000.0, t6 * 1000.0, t4 * 1000.0, t5 * 1000.0);
+
+            let shader_render_time = shader_render_pass_time_end - shader_render_pass_time_start;
+            let ui_render_time = ui_rendering_time_end - ui_rendering_time_start;
+            let buffer_upload_time = buffer_upload_end - buffer_upload_start;
+
+            let text = format!("Frame timings (ms): Everything: {:.3}, Events: {:.3}, [ GPU Draw: {:.3} ; Buffer Upload: {:.3}, Shader Render: {:.3}, Ui Rendering: {:.3} Event Handling: {:.3} ], Render Texture: {:.3}, Present: {:.3}",
+                timer.delta_time * 1000.0,  // everything
+                t0 * 1000.0,  // events
+                t2 * 1000.0,  // gpu draw
+                buffer_upload_time * 1000.0,  // buffer upload
+                shader_render_time * 1000.0,  // shader render
+                ui_render_time * 1000.0,  // ui render
+                t6 * 1000.0,  // event handling (yes, it reads 0, but it does actually do things and therefore should be here)
+                t4 * 1000.0,  // render texture
+                t5 * 1000.0,  // present
+            );
             logs.push(Log {
                 message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text),
                 level: LoggingError::Warning,
