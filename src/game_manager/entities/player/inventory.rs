@@ -1,7 +1,24 @@
-use crate::game_manager::{entities::player::{font_rendering::render_font_unifont, items::{Item, ItemType, ToolType}, player::{KeyBind, KeyBindings, PlayerData}, player_ui::PlayerUiManager}, game::GameError, world::tile_map};
+use crate::game_manager::{entities::{manager::{EntityManager, ItemDrop}, player::{font_rendering::render_font_unifont, items::{Item, ItemType, ToolType}, player::{KeyBindings, PlayerData}, player_ui::PlayerUiManager}}, game::GameError, world::tile_map};
 use crate::core::{event_handling::event_handler::EventHandler, rendering::ui::{UiElement, UiError}, timer::Timer};
 use std::rc::Rc;
 
+pub static TILE_DROPS: &[TileDrop] = &[];
+
+pub struct TileDrop {
+    parent_tile: u32,
+    drops_tiles: &'static [u32],
+    droped_textures: &'static [u32],
+}
+
+impl TileDrop {
+    pub const fn new(parent_tile: u32, drops_tiles: &'static [u32], droped_textures: &'static [u32]) -> Self {
+        Self { parent_tile, drops_tiles, droped_textures }
+    }
+
+    pub fn get_dropped_tile_info(&self) -> (u32, u32) {
+        (self.drops_tiles[0], self.droped_textures[0])  // todo! actually add chance and stuff to this at some point
+    }
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Inventory {
@@ -27,9 +44,28 @@ impl Inventory {
         }
     }
 
-    pub fn left_click_item(&mut self, tile_x: usize, tile_y: usize, tile_map: &mut tile_map::TileMap) -> Result<(), GameError> {
+    fn clicked_inventory(&self, mouse_position: (u32, u32)) -> bool {
+        mouse_position.0 >= 50 && mouse_position.0 <= 40 * 10 + 50 && mouse_position.1 >= 150 && mouse_position.1 <= 50 * 4 + 150
+    }
+
+    pub fn left_click_item(
+        &mut self,
+        tile_x: usize,
+        tile_y: usize,
+        tile_map: &mut tile_map::TileMap,
+        event_handler: &EventHandler,
+        ui_manager: &mut PlayerUiManager,
+        entity_manager: &mut EntityManager
+    ) -> Result<(), GameError> {
+        let inventory_open = ui_manager.ui_elements.iter().any(|e| e.identifier == "Inventory");
+        if inventory_open && self.clicked_inventory(event_handler.mouse.position) { return Ok(()); }
         match & self.hot_bar[self.selected_item] {
             Some(Item { item_type: Some(ItemType::Tool(ToolType::Breaker(_can_break))), .. }) => {
+                let tile = tile_map.get_tile(tile_x, tile_y, 0);
+                let tile_texture_id = TILE_DROPS.iter().find(|tile_drop| tile_drop.parent_tile == tile);
+                if let Some(tile) = tile_texture_id {
+                    entity_manager.new_drop(ItemDrop::Tile(tile.get_dropped_tile_info().1), ((tile_x + 1) * 8 + 2) as u32, ((tile_y + 1) * 8 + 2) as u32);
+                }
                 tile_map.change_tile(tile_x, tile_y, 0, 0)?;
             },
             _ => {},
@@ -37,7 +73,17 @@ impl Inventory {
         Ok(())
     }
 
-    pub fn right_click_item(&mut self, tile_x: usize, tile_y: usize, tile_map: &mut tile_map::TileMap) -> Result<(), GameError> {
+    pub fn right_click_item(
+        &mut self,
+        tile_x: usize,
+        tile_y: usize,
+        tile_map: &mut tile_map::TileMap,
+        event_handler: &EventHandler,
+        ui_manager: &mut PlayerUiManager,
+        _entity_manager: &mut EntityManager
+    ) -> Result<(), GameError> {
+        let inventory_open = ui_manager.ui_elements.iter().any(|e| e.identifier == "Inventory");
+        if inventory_open && self.clicked_inventory(event_handler.mouse.position) { return Ok(()); }
         match self.hot_bar[self.selected_item] {
             Some(Item { item_type: Some(ItemType::Block(id)), .. }) => {
                 tile_map.change_tile(tile_x, tile_y, 0, id as u32)?;
@@ -85,16 +131,23 @@ impl Inventory {
 
 // it may be more efficent to store one instance, and just swap it between the active vector, and some sort of storage location, but idk, that sounds like work, and it should be fast enough as is
 pub fn generate_player_inventory_ui_element(item_textures: Rc<Vec<[u32; 256]>>, font_atlas: Rc<Vec<[u32; 256]>>) -> UiElement<PlayerData> {
-    UiElement::new(String::from("Inventory"), (50, 50), (400, 200), Box::new(|pixels, (_window_size, pitch), _data, (_pos, _size)| {
-        for x in 250..500 {
-            for y in 150..400 {
-                pixels[x * 3 + y * pitch    ] = 250;
-                pixels[x * 3 + y * pitch + 1] = 250;
-                pixels[x * 3 + y * pitch + 2] = 250;
+    UiElement::new(String::from("Inventory"), (50, 150), (400, 200), 
+        Box::new(move |pixels, (window_size, pitch), data, (pos, size)| {
+            let item_textures = item_textures.clone();
+            let font_atlas = font_atlas.clone();
+            for i in 0..4 {
+                render_item_row(item_textures.clone(),
+                                font_atlas.clone(),
+                                &data.inventory.inventory[i],
+                                pixels,
+                                (window_size, pitch),
+                                ((pos.0, pos.1 + i * 50), size),
+                                None
+                )?;
             }
+            Ok(())  // todo! do things here
         }
-        Ok(())  // todo! do things here
-    }))
+    ))
 }
 
 pub fn generate_player_hotbar_ui_element(item_textures: Rc<Vec<[u32; 256]>>, font_atlas: Rc<Vec<[u32; 256]>>) -> UiElement<PlayerData> {
@@ -103,10 +156,18 @@ pub fn generate_player_hotbar_ui_element(item_textures: Rc<Vec<[u32; 256]>>, fon
             let item_textures = item_textures.clone();
             let font_atlas = font_atlas.clone();
 
-            render_item_row(item_textures, font_atlas, &data.inventory.hot_bar, pixels, (window_size, pitch), data, (pos, _size))?;
+            render_item_row(item_textures,
+                            font_atlas,
+                            &data.inventory.hot_bar,
+                            pixels,
+                            (window_size, pitch),
+                            (pos, _size),
+                            Some(data.inventory.selected_item)
+            )?;
 
             Ok(())
-    }))
+        }
+    ))
 }
 
 // renders a row of items (an example being the hotbar)
@@ -117,15 +178,15 @@ fn render_item_row(
     items: &[Option<Item>; 10],
     pixels: &mut [u8],
     (window_size, pitch): ((u32, u32), usize),
-    data: &PlayerData,
     (pos, _size): ((usize, usize), (usize, usize)),
+    selected: Option<usize>,
 ) -> Result<(), UiError> {
     // going item by item
     for item_index in 0..10 {
         let pixel_position = (pos.0 + item_index * 40, pos.1);
 
         // drawing the backing (needs improved visuals, but I'm lazy rn and have homework due soon)
-        let color = if data.inventory.selected_item == item_index { (200, 200, 200) } else { (100, 100, 100) };
+        let color = if selected == Some(item_index) { (200, 200, 200) } else { (100, 100, 100) };
         for x in pixel_position.0..pixel_position.0 + 40 {
             for y in pixel_position.1..pixel_position.1 + 46 {
                 let pixel_index = x * 3 + y * pitch as usize;

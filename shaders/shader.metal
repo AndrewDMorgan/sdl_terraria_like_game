@@ -162,6 +162,7 @@ kernel void ComputeShader (
     // is this slow? YES   does it work? for now
     // todo! optimize this (possibly move it to the cpu end to prevent the O(screen * entities))
     //     the extra overhead of doing per pixel far outweighs the gpu's power
+    // actually, this works really well, and isn't too bad
     float2 half_size = float2(width, height) * 0.5;
     float2 camera_position_corrected = float2(metal::round((gid_f.x - half_size.x) * inv_zoom * 8.0) * 0.125, metal::round((gid_f.y - half_size.y) * inv_zoom * 8.0) * 0.125);
     for (uint i = 0; i < num_entities; i++) {

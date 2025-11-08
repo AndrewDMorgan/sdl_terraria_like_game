@@ -1,3 +1,4 @@
+use crate::game_manager::entities::manager::EntityManager;
 use crate::game_manager::entities::player::{player::*, player_ui::PlayerUiManager};
 use crate::game_manager::world::{world_gen::*, tile_map::*};
 use crate::textures::textures::get_texture_atlas;
@@ -5,6 +6,8 @@ use crate::logging::logging::{Log, Logs};
 
 // the maximum item textures (in this context, this can safely be set to any value >= to the total texture count as no gpu buffers rely upon a static size for this)
 static MAX_ITEM_TEXTURES: usize = u16::MAX as usize;
+
+static MAX_BLOCK_ITEM_TEXTURES: usize = u16::MAX as usize;
 
 /// The main game structure
 pub struct Game {
@@ -14,6 +17,8 @@ pub struct Game {
 
     // if a lot of unique ui elements are added, this could be abstracted into its own ui manager struct
     player_ui_manager: PlayerUiManager,  // storing this external to player since it can't be saved (and really doesn't need to be)
+
+    pub(crate) entity_manager: EntityManager,
 }
 
 impl Game {
@@ -26,6 +31,9 @@ impl Game {
 
         let file = std::fs::File::create(&format!("{}/world_save_version_{}/world_save/world_generator.json", path_prefix, version)).unwrap();
         serde_json::to_writer(file, &self.world_generator)?;
+
+        let file = std::fs::File::create(&format!("{}/world_save_version_{}/world_save/entities/entity.json", path_prefix, version)).unwrap();
+        serde_json::to_writer(file, &self.entity_manager)?;
 
         Ok(())
     }
@@ -54,6 +62,7 @@ impl Game {
         let player = Self::file_loader(&format!("{}/world_save_version_{}/player/player.json", path_prefix, version))?;
         let tile_map = Self::file_loader(&format!("{}/world_save_version_{}/world_save/tile_map.json", path_prefix, version))?;
         let world_generator = Self::file_loader(&format!("{}/world_save_version_{}/world_save/world_generator.json", path_prefix, version))?;
+        let entity = Self::file_loader(&format!("{}/world_save_version_{}/world_save/entities/entity.json", path_prefix, version))?;
         Ok(Game {
             player,
             tile_map,
@@ -74,6 +83,7 @@ impl Game {
                 message: e.details,
                 severity: Severity::Fatal
             })?,
+            entity_manager: entity,
         })
     }
 
@@ -105,6 +115,7 @@ impl Game {
                 message: e.details,
                 severity: Severity::Fatal
             })?,
+            entity_manager: EntityManager::new(),
         })
     }
 
@@ -114,7 +125,7 @@ impl Game {
         screen_size: (u32, u32),
     ) -> Result<(), GameError> {
         if let Some(tile_map) = self.tile_map.get_current_map(Dimension::Overworld) {
-            self.player.update_key_events(timer, event_handler, tile_map, screen_size, &mut self.player_ui_manager)?;
+            self.player.update_key_events(timer, event_handler, tile_map, screen_size, &mut self.player_ui_manager, &mut self.entity_manager)?;
         } Ok(())
     }
 
@@ -127,6 +138,9 @@ impl Game {
     }
 
     pub fn render_ui(&mut self, buffer: &mut [u8], buffer_size: (u32, u32), pitch: usize) -> Result<(), crate::core::rendering::ui::UiError> {
+        // rendering entities
+        //self.entity_manager.render(buffer, (buffer_size, pitch), &self.player.camera);
+        
         // rendering any ui related to the player
         self.player.render_ui(buffer, buffer_size, &mut self.player_ui_manager, pitch)?;
 

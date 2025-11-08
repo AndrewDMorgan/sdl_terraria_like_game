@@ -147,6 +147,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         let mut ui_rendering_time_end = 0.0;
         let mut buffer_upload_start = 0.0;
         let mut buffer_upload_end = 0.0;
+        let gpu_start = timer.elapsed_frame().as_secs_f64();
         let mut updating_error: Result<(), GameError> = Ok(());
         let buffer_result: Result<(), ShaderError> = surface_texture.with_lock(None, |pixels, pitch| {
             let grid_size = MTLSize {
@@ -169,6 +170,8 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
 
             let mut entities: Vec<Vec<(u32, u16, i16, i16, u16, u32)>> = vec![];
             entities.push(game.player.get_model());
+            entities.push(game.entity_manager.get_render(&game.player.camera, window_size));
+
             let entities = entities
                 .concat()
                 .iter()
@@ -334,7 +337,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         // logging slow frames (debug purposes ig)
         if matches!(logging_level, Logging::Everything | Logging::PerformanceOnly) && timer.delta_time > logger::PERFORMANCE_LOG_THRESHOLD {
             let t0 = elapsed_for_events;
-            let t2 = elapsed_for_gpu_drawing - elapsed_for_events;
+            let t2 = elapsed_for_gpu_drawing - gpu_start;
             let t6 = elapsed_for_event_handling - start_of_event_handling;
             let t4 = elapsed_for_rendering_texture - elapsed_for_events;
             let t5 = elapsed_for_presenting - elapsed_for_rendering_texture;
@@ -355,11 +358,11 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 t5 * 1000.0,  // present
             );
             logs.push(Log {
-                message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text),
+                message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}\n * entity count: {}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text, game.entity_manager.get_entity_count()),
                 level: LoggingError::Warning,
             });
         }
-
+        
         // only doing it here in case multiple logs are added in a frame
         if logs.was_updated() {
             logs.save()?;
