@@ -259,7 +259,7 @@ impl Player {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct CameraTransform {
     pub x: f32,
     pub y: f32,

@@ -1,7 +1,10 @@
 use crate::game_manager::entities::player::player::CameraTransform;
 use crate::game_manager::game::GameError;
+use crate::game_manager::world::tile_map::mini_map::MiniMap;
 use crate::game_manager::world::world_gen::WorldGenerator;
-use crate::logging::logging::LoggingError;
+use crate::logging::logging::{LoggingError, Logs};
+
+pub mod mini_map;
 
 pub static GRASS_IDS: &[u32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 47];
 pub static DIRT_IDS: &[u32] = &[15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 46];
@@ -52,19 +55,24 @@ impl From<TileMapError> for String {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TileMap {
-    tiles: Vec<Vec<[u32; 3]>>,
+    pub tiles: Vec<Vec<[u32; 3]>>,
     lighting: Vec<Vec<[u8; 3]>>,
     pub sky_light: Vec<u32>,
     pub(crate) entity_lights: Vec<(String, EntityLight)>,
+    pub(crate) mini_map: mini_map::MiniMap,
 }
 
 impl TileMap {
-    pub fn new(width: usize, height: usize, world_generator: Option<&WorldGenerator>) -> Result<Self, TileMapError> {
+    pub fn new(width: usize, height: usize, world_generator: Option<&WorldGenerator>, logs: &mut Logs) -> Result<Self, TileMapError> {
         let mut tile_map = TileMap {
             tiles: vec![vec![[0; 3]; width]; height],
             lighting: vec![vec![[0; 3]; width]; height],
             sky_light: vec![height as u32; width],
             entity_lights: Vec::new(),
+            mini_map: MiniMap::new(width, height, logs).map_err(|e| TileMapError {
+                message: format!("Failed to create MiniMap: {:?}", e),
+                level: LoggingError::Error,
+            })?,
         };
         if let Some(generator) = world_generator {
             generator.generate_tile_map(&mut tile_map)?;
@@ -325,7 +333,7 @@ impl TileMap {
     }
     
     // todo! fix the bug here that happens when zooming where the tiles jump around a bit, not sure where it is tbh
-    pub fn get_render_slice(&self, camera_transform: &CameraTransform, window_size: (u32, u32)) -> (Vec<[u64; 4]>, CameraTransform, (u32, u32)) {
+    pub fn get_render_slice(&mut self, camera_transform: &CameraTransform, window_size: (u32, u32)) -> (Vec<[u64; 4]>, CameraTransform, (u32, u32)) {
         // don't even try to read this or the math, it's a mess, but seems to work for now
         
         // the plus 2 is to make sure blocks at the very edge aren't cut off
@@ -383,6 +391,7 @@ impl TileMap {
                     light[1].max(sky_light),
                     light[2].max(sky_light),
                 ];
+                self.mini_map.update_light_value(light, x, y);
 
                 visible_tiles.push([
                     self.tiles[y][x][0] as u64,

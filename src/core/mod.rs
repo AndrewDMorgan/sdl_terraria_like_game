@@ -11,6 +11,7 @@ use crate::shaders::shader_handler::{ShaderError, Tuple};
 
 use crate::core::event_handling::*;
 pub(crate) mod event_handling;
+use crate::shaders::shader_loader::MAX_ENTITIES;
 use crate::shaders::*;
 pub(crate) mod timer;
 use timer::Timer;
@@ -28,12 +29,10 @@ static MINIMUM_WINDOW_WIDTH: u32 = 1200;
 static MINIMUM_WINDOW_HEIGHT: u32 = 750;
 
 pub fn start(logs: &mut Logs) -> Result<(), String> {
-    // this could, in theory, be configurable, but for now, debugging is necessary so this is fine (and there's no ui and therefore no settings...)
-    let logging_level = Logging::Everything;
-    
     // todo! temporary just to handle the game for now, no menues or anything (umm..... it does have some ui now... but we'll go with that)
     //     *temporary apparently means permanent? Either way, it's here to stay
     let mut game = Game::new(logs)?;
+    //let mut game = Game::from_save(logs, "world_saves/testing_world", "0.0.1-alpha")?;
 
     // Initialize SDL2
     let sdl = sdl2::init()?;
@@ -88,28 +87,22 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             event_handler::Status::Continue => {},
             event_handler::Status::Quit => break 'running,
             event_handler::Status::Error(ref msg, severity) => {
-                if match (&logging_level, severity) {
-                    (Logging::Everything, _) => true,
-                    (Logging::WarningOnly, 0..15 | u8::MAX) => true,
-                    (Logging::ErrorOnly, 15..) => true,
-                    (Logging::PerformanceOnly, 75..) => true,
-                    (Logging::Nothing, u8::MAX) => false,
-                    _ => false,
-                } {
-                    logs.push(Log {
-                        message: format!("[Event Handling Error; {}] {}", match severity {
-                            0..15 => "Warning",
-                            15..75 => "Error",
-                            75..u8::MAX => "Serious",
-                            u8::MAX => "Fatal",
-                        }, msg),
-                        level: match severity {
-                            0..15 => LoggingError::Warning,
-                            _ => LoggingError::Error,
-                        },
+                logs.push(Log {
+                    message: format!("[Event Handling Error; {}] {}", match severity {
+                        0..15 => "Warning",
+                        15..75 => "Error",
+                        75..u8::MAX => "Serious",
+                        u8::MAX => "Fatal",
+                    }, msg),
+                    level: match severity {
+                        0..15 => LoggingError::Warning,
+                        _ => LoggingError::Error,
+                    },
+                }, 12, match severity {
+                        0..15 => logger::LogType::Warning,
+                        _ => logger::LogType::Error,
                     });
-                    if severity == u8::MAX {  break 'running;  }
-                }
+                if severity == u8::MAX {  break 'running;  }
             }
         }
         
@@ -129,7 +122,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             logs.push(Log {
                 message: format!("[Buffer Overflow Error; Fatal] Window size ({}, {}) exceeds the expected buffer size ({}, {}). Unable to continue as it will overflow the buffer.", window_size.0, window_size.1, device_width, device_height),
                 level: LoggingError::Error,
-            });
+            }, 13, logger::LogType::Error);
             break 'running;
         }
 
@@ -171,6 +164,12 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             let mut entities: Vec<Vec<(u32, u16, i16, i16, u16, u32)>> = vec![];
             entities.push(game.player.get_model());
             entities.push(game.entity_manager.get_render(&game.player.camera, window_size));
+            if entities.len() >= MAX_ENTITIES {
+                logs.push(Log {
+                    message: format!("[Memory Warning] Entities surpassed maximum GPU buffer size; length of {}", entities.len()),
+                    level: LoggingError::Warning
+                }, 14, logger::LogType::Memory);
+            }
 
             let entities = entities
                 .concat()
@@ -183,8 +182,9 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 ((offset_y.cast_unsigned() as u128) << 48) |
                 (*depth as u128)
             }).collect::<Vec<u128>>();
-            shader.update_buffer(10, entities.len() as u32)?;
-            shader.update_buffer_slice(11, &entities)?;
+            shader.update_buffer(10, entities.len().min(MAX_ENTITIES) as u32)?;
+            // making sure the slice doesn't overflow or anything
+            shader.update_buffer_slice(11, &entities[0..entities.len().min(MAX_ENTITIES)])?;
             /*
             constant uint&   num_texts         [[ buffer(14) ]],  // number of text entries
             constant Text*   text_buffer       [[ buffer(15) ]],  // text data
@@ -198,37 +198,38 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             //        8 bits for the length of the character buffer
             */
             let text_buffer = vec![
-                Tuple {
-                    first:
-                        100u128 << 112 |  // x offset
-                        90u128  << 96  |  // y offset
-                        (((190u32 << 16) as u128) << 48) |  // color
-                        8u128  << 8   |  // font size
-                        12u128,  // buffer size
-                    second: {
-                        let mut text = [0u8; 32];
-                        text[0 ] = 'H' as u8;
-                        text[1 ] = 'e' as u8;
-                        text[2 ] = 'l' as u8;
-                        text[3 ] = 'l' as u8;
-                        text[4 ] = 'o' as u8;
-                        text[5 ] = ' ' as u8;  // how did any of this manage to actually work??
-                        text[6 ] = 'W' as u8;  // anyway, it doesn't matter, because it appears all text rendering will happen on the cpu anyways
-                        text[7 ] = 'o' as u8;  // all that effort... but the text has to be rendered last, during the ui pass, not this pass
-                        text[8 ] = 'r' as u8;
-                        text[9 ] = 'l' as u8;
-                        text[10] = 'd' as u8;
-                        text[11] = '!' as u8;
-                        text
-                    },
+                {
+                    let input_text = format!(
+                        "({},{})",
+                        (game.player.entity.position.0 / 8.0) as usize,
+                        match game.get_tilemap_manager().get_current_map(crate::game_manager::world::tile_map::Dimension::Overworld) {
+                            Some(tile_map) => (tile_map.get_map_height() - 1) as usize,
+                            None => 0,
+                        } - (game.player.entity.position.1 / 8.0) as usize
+                    );
+                    Tuple {
+                        first:
+                            100u128 << 112 |  // x offset
+                            90u128  << 96  |  // y offset
+                            ((u16::MAX as u128) << 48) |  // color
+                            16u128  << 8   |  // font size
+                            input_text.len() as u128,  // buffer size
+                        second: {
+                            let mut text = [0u8; 32];
+                            for (i, char) in input_text.chars().enumerate() {
+                                text[i] = char as u8;
+                            }
+                            text
+                        },
+                    }
                 }
             ];
             shader.update_buffer(14, text_buffer.len() as u32)?;
             shader.update_buffer_slice(15, &text_buffer)?;
 
             // getting the tilemap slice to render
-            let camera = &game.player.camera;
-            match game.get_tilemap_manager_ref().get_current_map_ref(crate::game_manager::world::tile_map::Dimension::Overworld) {
+            let camera = &game.player.camera.clone();  // the struct is only a couple 32 bit floats or whatever, so not too expensive to clone
+            match game.get_tilemap_manager().get_current_map(crate::game_manager::world::tile_map::Dimension::Overworld) {
                 Some(tile_map) => {
                     let (map, offset_transform, visible_size) = tile_map.get_render_slice(
                         camera,
@@ -243,13 +244,11 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 _ => {
                     // if there's none, do this?
                     shader.update_buffer_slice::<&[u32]>(8, &[])?;
-                    if matches!(logging_level, Logging::Everything | Logging::WarningOnly) {
-                        logs.push(Log {
-                            message: format!("[Render Warning] No tile map found for rendering in current dimension."),
-                            level: LoggingError::Warning,
-                        });
-                    }
-                },
+                    logs.push(Log {
+                        message: format!("[Render Warning] No tile map found for rendering in current dimension."),
+                        level: LoggingError::Warning,
+                    }, 15, logger::LogType::Warning);
+                }
             }
 
             shader.update_buffer_slice(18, pixels)?;
@@ -267,7 +266,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                     // this is a slightly odd setup for me; usually I update entities than render, not render than update
                     //    technically speaking, because the gpu requires non-mutating data, even though the updating is
                     //    concurrently happening, it's using the old state of the game, so it kinda does act as render than update
-                    game.update_key_events(&timer, &event_handler, window_size)?;
+                    game.update_key_events(&timer, &event_handler, window_size, logs)?;
 
                     elapsed_for_event_handling = timer.elapsed_frame().as_secs_f64();
                     Ok(())
@@ -294,25 +293,21 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         match buffer_result {  // slightly less violently exiting, and at least telling the user why
             Ok(_) => {},
             Err(e) => {
-                if matches!(logging_level, Logging::Everything | Logging::ErrorOnly | Logging::WarningOnly) {
-                    logs.push(Log {
-                        message: format!("[Shader Error] Failed to render frame:\n{:?}", e),
-                        level: LoggingError::Error,
-                    });
-                    break 'running;
-                }
+                logs.push(Log {
+                    message: format!("[Shader Error] Failed to render frame:\n{:?}", e),
+                    level: LoggingError::Error,
+                }, 16, logger::LogType::Error);
+                break 'running;
             }
         }
         match updating_error {
             Ok(_) => {},
             Err(e) => {
-                if matches!(logging_level, Logging::Everything | Logging::ErrorOnly | Logging::WarningOnly) {
-                    logs.push(Log {
-                        message: format!("[Game Update Error] Failed to update game state during frame render:\n{:?}", e),
-                        level: LoggingError::Error,
-                    });
-                    if e.severity == Severity::Fatal { break 'running; }
-                }
+                logs.push(Log {
+                    message: format!("[Game Update Error] Failed to update game state during frame render:\n{:?}", e),
+                    level: LoggingError::Error,
+                }, 17, logger::LogType::Error);
+                if e.severity == Severity::Fatal { break 'running; }
             }
         }
         
@@ -335,7 +330,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         timer.update_frame_data();
 
         // logging slow frames (debug purposes ig)
-        if matches!(logging_level, Logging::Everything | Logging::PerformanceOnly) && timer.delta_time > logger::PERFORMANCE_LOG_THRESHOLD {
+        if timer.delta_time > logger::PERFORMANCE_LOG_THRESHOLD {
             let t0 = elapsed_for_events;
             let t2 = elapsed_for_gpu_drawing - gpu_start;
             let t6 = elapsed_for_event_handling - start_of_event_handling;
@@ -360,9 +355,9 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             logs.push(Log {
                 message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}\n * entity count: {}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text, game.entity_manager.get_entity_count()),
                 level: LoggingError::Warning,
-            });
+            }, 18, logger::LogType::Performance);
         }
-        
+
         // only doing it here in case multiple logs are added in a frame
         if logs.was_updated() {
             logs.save()?;
@@ -370,6 +365,9 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     }
 
     logs.save()?;
+
+    //game.save("world_saves/testing_world", "0.0.1-alpha").map_err(|e| format!("{:?}", e))?;
+    //println!("Saved game file");
 
     Ok(())
 }

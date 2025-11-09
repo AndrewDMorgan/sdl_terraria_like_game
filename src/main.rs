@@ -16,7 +16,7 @@ well, ig it maybe only needs to be run after restart? Or did this just fix it? i
 
 */
 
-use crate::logging::logging::{Log, LoggingError, Logs};
+use crate::logging::logging::{Log, LogType, LoggingError, Logs};
 
 mod shaders;
 mod game_manager;
@@ -26,8 +26,9 @@ mod core;
 mod utill;
 
 fn main() {
+    let logging_level = logging::logging::Logging::Everything;
     let (concluded_sender, concluded_receiver) = crossbeam::channel::bounded(1);
-    let mut logs = Logs::new(concluded_receiver);
+    let mut logs = Logs::new(concluded_receiver, logging_level);
 
     // using a raw pointer, because, if a non-unwound error is thrown, it crashes, but a mutex lock isn't dropped (even though the thread crashed)
     // so it should be fine using it here as by the time the catch_unwind is done, it should be no longer in use
@@ -45,7 +46,7 @@ fn main() {
         Err(e) => {
             logs.push(Log {  // not sure how this would actually happen, but at least it's here incase
                 message: format!("Failed to send conclusion signal: {}", e), level: LoggingError::Error
-            });
+            }, 22, LogType::Error);
         }
     }
     
@@ -54,12 +55,12 @@ fn main() {
         Ok(Err(e)) => {
             logs.push(Log {
                 message: format!("Fatal Error: {}", e), level: LoggingError::Error
-            });
+            }, 23, LogType::Error);
         },
         Err(e) => {
             logs.push(Log {
                 message: format!("[Uncaught] Fatal Error: {:?}", e), level: LoggingError::Error
-            });
+            }, 24, LogType::Error);
         },
     }
 }

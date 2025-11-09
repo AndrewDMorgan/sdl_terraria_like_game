@@ -28,7 +28,7 @@ impl EntityManager {
             match &drop.0 {
                 ItemDrop::Tile(tile_texture_id, _item) => {
                     let position = (drop.1 as f32 - camera.x, drop.2 as f32 - camera.y);
-                    if position.0 < -edge_x - 4.0 || position.1 < -edge_y - 4.0 || position.0 > edge_x || position.1 > edge_y {
+                    if position.0 < -edge_x - 8.0 || position.1 < -edge_y - 8.0 || position.0 > edge_x || position.1 > edge_y {
                         continue;
                     }
                     render_data.push((*tile_texture_id as u32, 0, (position.0 * 100.0) as i16, (position.1 * 100.0) as i16, 0, 0));

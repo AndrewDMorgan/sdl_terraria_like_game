@@ -2,7 +2,7 @@ use metal::Device;
 
 use crate::{logging::logging::{Log, LoggingError, Logs}, shaders::shader_handler::Shader, textures::textures::{get_font_atlas, get_texture_atlas}};
 
-static MAX_ENTITIES: usize = 1024;
+pub static MAX_ENTITIES: usize = 1024;
 static MAX_PARTICLES: usize = 2048;
 static MAX_TEXTS: usize = 1024;
 
@@ -70,7 +70,7 @@ pub fn load_game_shaders(device: &Device, max_screen_size: (u32, u32), logs: &mu
                 total_textures_loaded_entities - 1, // minus 1 to account for the empty texture
                 total_textures_loaded_tiles - 1,
                 total_textures_loaded_particles - 1
-            ), level: LoggingError::Info });
+            ), level: LoggingError::Info }, 21, crate::logging::logging::LogType::Information);
 
             shader
         }

@@ -68,7 +68,9 @@ impl Inventory {
                 items[3] = Some(Item::new(4, Some(ItemType::Block(88)), String::from("Light"), 128, 0));
                 items
             },
-            inventory: Default::default(),
+            inventory: {
+                 [[const { None }; 10], [const { None }; 10], [const { None }; 10], [const { None }; 10]]
+            },
         }
     }
 
@@ -161,17 +163,13 @@ impl Inventory {
                                 *slot_item = Some(item.clone());
                                 true
                             }
-                            _ => { false }
                         }
                     } else { false }
                 })
             }) {
                 return None;
-            }
-        } else {
-            return None;
-        }
-        return Some(item);
+            } return Some(item);
+        } return None;
     }
 
     pub fn update_key_events(
@@ -208,8 +206,12 @@ impl Inventory {
                 continue;
             }
             if dif_x*dif_x + dif_y*dif_y < 100.0 {
-                let (drop, _, _, _) = entity_manager.drops.remove(i);
-                self.add_item(drop);
+                let (drop, p1, p2, p3) = entity_manager.drops.remove(i);
+                let item = self.add_item(drop);
+                if let Some(item) = item {
+                    entity_manager.drops.insert(i, (item, p1, p2, p3));
+                    i += 1;
+                }
                 continue;
             }
             i += 1;

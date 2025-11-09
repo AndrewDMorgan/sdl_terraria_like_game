@@ -1,6 +1,6 @@
 use crate::{core::rendering::ui::UiElement,
             game_manager::entities::player::{inventory::generate_player_hotbar_ui_element, player::PlayerData},
-            logging::logging::Log, textures::textures::get_texture_atlas};
+            logging::logging::{Log, LogType}, textures::textures::get_texture_atlas};
 use std::rc::Rc;
 
 static MAX_FONT_CHARACTERS: usize = u16::MAX as usize;
@@ -22,7 +22,7 @@ impl PlayerUiManager {
             logs.push(Log {
                 message: format!("Loaded {} font characters for the player ui rendering.", total_textures_loaded - 1),
                 level: crate::logging::logging::LoggingError::Info
-            });
+            }, 20, LogType::Information);
             atlas
         });
         Ok(Self {
