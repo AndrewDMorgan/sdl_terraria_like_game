@@ -141,7 +141,16 @@ impl Player {
     ) -> Result<(), GameError> {
         self.entity.sprite.update_frame(timer.delta_time);  // this is the best place to do this ig
 
-        self.player_data.inventory.update_key_events(timer, event_handler, tile_map, screen_size, &self.key_bindings, ui_manager)?;
+        self.player_data.inventory.update_key_events(
+            timer,
+            event_handler,
+            tile_map,
+            screen_size,
+            &self.key_bindings,
+            ui_manager,
+            entity_manager,
+            &self.entity.position,
+        )?;
 
         let raw_keys_held = event_handler.keys_held.iter().map(|k| **k).collect::<Vec<_>>();
         if KeyBindings::check_true(&self.key_bindings.right, &raw_keys_held, &event_handler.mods_held) {

@@ -323,7 +323,7 @@ impl TileMap {
             }
         } Ok(())
     }
-
+    
     // todo! fix the bug here that happens when zooming where the tiles jump around a bit, not sure where it is tbh
     pub fn get_render_slice(&self, camera_transform: &CameraTransform, window_size: (u32, u32)) -> (Vec<[u64; 4]>, CameraTransform, (u32, u32)) {
         // don't even try to read this or the math, it's a mess, but seems to work for now
@@ -372,7 +372,8 @@ impl TileMap {
                 let mut sky_light = 0;
                 for x_offset in (-10isize)..10isize {
                     let sky_light_new = 10usize.saturating_sub(y.saturating_sub(self.sky_light[(x as isize + x_offset).max(0) as usize] as usize));
-                    let sky_light_new = ((sky_light_new as f32 / 10.0 * 255.0) as u8).saturating_sub((x_offset.abs() as f32 * (255.0 / 10.0)) as u8);
+                    // the pow is to create an easing curve to make it less diamond shaped, but idk how I feel about it. But, for now, it works
+                    let sky_light_new = ((sky_light_new as f32 / 10.0 * 255.0) as u8).saturating_sub(((x_offset as f32 * 0.1).powi(2) * 255.0) as u8);
                     sky_light = sky_light.max(sky_light_new);
                 }
 

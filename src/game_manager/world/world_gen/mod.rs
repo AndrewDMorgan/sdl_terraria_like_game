@@ -8,6 +8,228 @@ pub struct WorldGenerator {
     //
 }
 
+pub enum Biom {
+    Forest,
+    Desert,
+    Jungle,
+    Tundra,
+}
+
+struct BiomInfo {
+    pub biom: Biom,
+    pub generation_parameters: Generator
+}
+
+struct Generator {
+    cave_noise: FastNoiseLite,
+    cave_threshold_noise: (FastNoiseLite, f32),
+    land_noise: FastNoiseLite,
+    tile_mapping: fn(u32) -> u32,  // todo! hook this up, maybe modify the fields, so that bioms can get more customization
+}
+
+impl Generator {
+    pub fn get_land_height(&self, x: f32, y: f32) -> f32 {
+        self.land_noise.get_noise_2d(x, y)
+    }
+
+    pub fn get_cave_chance(&self, x: f32, y: f32) -> bool {
+        self.cave_noise.get_noise_2d(x, y) > self.cave_threshold_noise.0.get_noise_2d(x, y) + self.cave_threshold_noise.1
+    }
+
+    pub fn get_replacement_tile(&self, tile: u32) -> u32 {
+        (self.tile_mapping)(tile)
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref BIOM_PARAMETERS: Vec<BiomInfo> = vec![
+        BiomInfo {
+            biom: Biom::Forest,
+            generation_parameters: Generator {
+                cave_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(42069));
+                    noise.set_noise_type(Some(NoiseType::ValueCubic));
+                    noise.set_frequency(Some(0.05));
+                    noise.set_cellular_distance_function(Some(fastnoise_lite::CellularDistanceFunction::Manhattan));
+                    noise.set_cellular_return_type(Some(fastnoise_lite::CellularReturnType::Distance2Div));
+                    noise.set_fractal_type(Some(FractalType::Ridged));
+                    noise.set_fractal_octaves(Some(3));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                cave_threshold_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(9876));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.1));
+                    (noise, 0.)
+                },
+                land_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(1337));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.02));
+                    noise.set_fractal_type(Some(FractalType::FBm));
+                    noise.set_fractal_octaves(Some(5));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                tile_mapping: |tile| { tile }
+            },
+        },
+        BiomInfo {
+            biom: Biom::Desert,
+            generation_parameters: Generator {
+                cave_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(42069));
+                    noise.set_noise_type(Some(NoiseType::ValueCubic));
+                    noise.set_frequency(Some(0.05));
+                    noise.set_cellular_distance_function(Some(fastnoise_lite::CellularDistanceFunction::Manhattan));
+                    noise.set_cellular_return_type(Some(fastnoise_lite::CellularReturnType::Distance2Div));
+                    noise.set_fractal_type(Some(FractalType::Ridged));
+                    noise.set_fractal_octaves(Some(3));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                cave_threshold_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(9876));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.1));
+                    (noise, 0.5)
+                },
+                land_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(1337));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.0001));
+                    noise.set_fractal_type(Some(FractalType::FBm));
+                    noise.set_fractal_octaves(Some(3));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                tile_mapping: |tile| { tile }
+            },
+        },
+        BiomInfo {
+            biom: Biom::Jungle,
+            generation_parameters: Generator {
+                cave_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(42069));
+                    noise.set_noise_type(Some(NoiseType::ValueCubic));
+                    noise.set_frequency(Some(0.075));
+                    noise.set_cellular_distance_function(Some(fastnoise_lite::CellularDistanceFunction::Manhattan));
+                    noise.set_cellular_return_type(Some(fastnoise_lite::CellularReturnType::Distance2Div));
+                    noise.set_fractal_type(Some(FractalType::Ridged));
+                    noise.set_fractal_octaves(Some(3));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                cave_threshold_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(9876));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.1));
+                    (noise, -0.5)
+                },
+                land_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(1337));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.075));
+                    noise.set_fractal_type(Some(FractalType::FBm));
+                    noise.set_fractal_octaves(Some(7));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                tile_mapping: |tile| { tile }
+            },
+        },
+        BiomInfo {
+            biom: Biom::Tundra,
+            generation_parameters: Generator {
+                cave_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(42069));
+                    noise.set_noise_type(Some(NoiseType::ValueCubic));
+                    noise.set_frequency(Some(0.05));
+                    noise.set_cellular_distance_function(Some(fastnoise_lite::CellularDistanceFunction::Manhattan));
+                    noise.set_cellular_return_type(Some(fastnoise_lite::CellularReturnType::Distance2Div));
+                    noise.set_fractal_type(Some(FractalType::Ridged));
+                    noise.set_fractal_octaves(Some(3));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                cave_threshold_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(9876));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.1));
+                    (noise, 0.)
+                },
+                land_noise: {
+                    let mut noise = FastNoiseLite::new();
+                    noise.set_seed(Some(1337));
+                    noise.set_noise_type(Some(NoiseType::Perlin));
+                    noise.set_frequency(Some(0.01));
+                    noise.set_fractal_type(Some(FractalType::FBm));
+                    noise.set_fractal_octaves(Some(5));
+                    noise.set_fractal_lacunarity(Some(2.0));
+                    noise.set_fractal_gain(Some(0.5));
+                    noise
+                },
+                tile_mapping: |tile| { tile }
+            },
+        },
+    ];
+}
+
+fn get_biom(biom: f32) -> (&'static BiomInfo, &'static BiomInfo, f32) {
+    let biom_ident = ((biom * 0.5 + 0.5) * BIOM_PARAMETERS.len() as f32);
+    let (extra_biom, weight) = if biom_ident - biom_ident.floor() > 0.5 {
+        (&BIOM_PARAMETERS[(biom_ident as usize + 1).min(BIOM_PARAMETERS.len() - 1)], (biom_ident - biom_ident.floor() - 0.5))
+    } else {
+        (&BIOM_PARAMETERS[(biom_ident as usize).saturating_sub(1)], 0.5 - (biom_ident - biom_ident.floor()))
+    };
+    let current_biom = &BIOM_PARAMETERS[biom_ident as usize];
+    (current_biom, extra_biom, weight)
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a * t + b * (1.0 - t)
+}
+
+fn sample_land_noise(x: f32, y: f32, biom: f32) -> f32 {
+    let (main_biom, blending_to_biom, weight) = get_biom(biom);
+    let noise_main = main_biom.generation_parameters.land_noise.get_noise_2d(x, y);
+    let noise_blending = blending_to_biom.generation_parameters.land_noise.get_noise_2d(x, y);
+    lerp(noise_main, noise_blending, weight)
+}
+
+fn sample_cave_noise(x: f32, y: f32, biom: f32) -> f32 {
+    let (main_biom, blending_to_biom, weight) = get_biom(biom);
+    let noise_main = main_biom.generation_parameters.cave_noise.get_noise_2d(x, y);
+    let noise_blending = blending_to_biom.generation_parameters.cave_noise.get_noise_2d(x, y);
+    lerp(noise_main, noise_blending, weight)
+}
+
+fn sample_cave_threshold_noise(x: f32, y: f32, biom: f32) -> f32 {
+    let (main_biom, blending_to_biom, weight) = get_biom(biom);
+    let noise_main = main_biom.generation_parameters.cave_threshold_noise.0.get_noise_2d(x, y) + main_biom.generation_parameters.cave_threshold_noise.1;
+    let noise_blending = blending_to_biom.generation_parameters.cave_threshold_noise.0.get_noise_2d(x, y) + blending_to_biom.generation_parameters.cave_threshold_noise.1;
+    lerp(noise_main, noise_blending, weight)
+}
+
 impl WorldGenerator {
     pub fn new() -> Self {
         WorldGenerator {
@@ -17,42 +239,20 @@ impl WorldGenerator {
 
     // todo! add perlin noise and stuff
     pub fn generate_tile_map(&self, tile_map: &mut crate::game_manager::world::tile_map::TileMap) -> Result<(), TileMapError> {
-        let mut noise = FastNoiseLite::new();
-        noise.set_seed(Some(1337));
-        noise.set_noise_type(Some(NoiseType::Perlin));
-        noise.set_frequency(Some(0.02));
-        noise.set_fractal_type(Some(FractalType::FBm));
-        noise.set_fractal_octaves(Some(5));
-        noise.set_fractal_lacunarity(Some(2.0));
-        noise.set_fractal_gain(Some(0.5));
-
-
-        let mut cave_noise = FastNoiseLite::new();
-        cave_noise.set_seed(Some(42069));
-        cave_noise.set_noise_type(Some(NoiseType::ValueCubic));
-        cave_noise.set_frequency(Some(0.05));
-        cave_noise.set_cellular_distance_function(Some(fastnoise_lite::CellularDistanceFunction::Manhattan));
-        cave_noise.set_cellular_return_type(Some(fastnoise_lite::CellularReturnType::Distance2Div));
-        cave_noise.set_fractal_type(Some(FractalType::Ridged));
-        cave_noise.set_fractal_octaves(Some(3));
-        cave_noise.set_fractal_lacunarity(Some(2.0));
-        cave_noise.set_fractal_gain(Some(0.5));
-
-
-        let mut cave_threshold_noise = FastNoiseLite::new();
-        cave_threshold_noise.set_seed(Some(9876));
-        cave_threshold_noise.set_noise_type(Some(NoiseType::Perlin));
-        cave_threshold_noise.set_frequency(Some(0.1));
-        
+        let mut biom_noise = FastNoiseLite::new();
+        biom_noise.set_seed(Some(1234));
+        biom_noise.set_noise_type(Some(NoiseType::Perlin));
+        biom_noise.set_frequency(Some(0.0025));
         for x in 0..tile_map.get_map_width() {
-            let dirt_depth = ((noise.get_noise_2d(x as f32, 25.0) * 0.5 + 0.5) * 10.0) as usize;
+            let biom = biom_noise.get_noise_2d(x as f32, 256.0);
+            let dirt_depth = ((sample_land_noise(x as f32, 25.0, biom) * 0.5 + 0.5) * 10.0) as usize;
             let mut in_sky = true;
 
             for y in 0..tile_map.get_map_height() {
-                let height = ((noise.get_noise_2d(x as f32, y as f32) * 0.5 + 0.5) * 50.0 + 100.0) as usize;
-                let cave_noise = cave_noise.get_noise_2d(x as f32, y as f32);
+                let height = ((sample_land_noise(x as f32, y as f32, biom) * 0.5 + 0.5) * 50.0 + 100.0) as usize;
+                let cave_noise = sample_cave_noise(x as f32, y as f32, biom);
 
-                if cave_noise > cave_threshold_noise.get_noise_2d(x as f32, y as f32) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
+                if cave_noise > sample_cave_threshold_noise(x as f32, y as f32, biom) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
                     if in_sky {
                         tile_map.sky_light[x] = y as u32;
                     }

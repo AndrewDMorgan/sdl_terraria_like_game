@@ -7,6 +7,14 @@ pub struct Hitbox {
     pub size: (f64, f64),
 }
 
+impl Hitbox {
+    pub fn contains_point(&self, point: (f64, f64)) -> bool {
+        let (x, y) = point;
+        x >= self.offset.0 && x <= self.offset.0 + self.size.0 &&
+        y >= self.offset.1 && y <= self.offset.1 + self.size.1
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Sprite<T>
     where T: Into<u8> + From<u8> + Default + Copy

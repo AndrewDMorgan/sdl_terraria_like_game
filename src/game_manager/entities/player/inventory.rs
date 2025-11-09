@@ -6,22 +6,34 @@ use rand::Rng;
 
 pub static TILE_DROPS: &[TileDrop] = &[
     TileDrop {
-        parent_tile: 1,
+        parent_tile: &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 47, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 46],
         drop_chances: &[1.0],
-        drops_items: &[ItemGenerator::new((1, 1), 1, Some(ItemType::Block(1)), "Dirt")],
+        drops_items: &[ItemGenerator::new((1, 1), 5, Some(ItemType::Block(1)), "Dirt", 512)],
         droped_textures: &[7],
+    },
+    TileDrop {
+        parent_tile: &[30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 6, Some(ItemType::Block(45)), "Stone", 512)],
+        droped_textures: &[8],
+    },
+    TileDrop {
+        parent_tile: &[88],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 7, Some(ItemType::Block(88)), "Light", 512)],
+        droped_textures: &[9],
     },
 ];
 
 pub struct TileDrop {
-    parent_tile: u32,
+    parent_tile: &'static [u32],
     drop_chances: &'static [f32],
     drops_items: &'static [ItemGenerator],  // the id of the item (could really be any u32, hopefully this won't require sequential ids so that in theory additions are easy and safe)
     droped_textures: &'static [u32],
 }
 
 impl TileDrop {
-    pub const fn new(parent_tile: u32, drop_chances: &'static [f32], drops_items: &'static [ItemGenerator], droped_textures: &'static [u32]) -> Self {
+    pub const fn new(parent_tile: &'static [u32], drop_chances: &'static [f32], drops_items: &'static [ItemGenerator], droped_textures: &'static [u32]) -> Self {
         Self { parent_tile, drop_chances, drops_items, droped_textures }
     }
 
@@ -50,10 +62,10 @@ impl Inventory {
             selected_item: 0,
             hot_bar: {
                 let mut items: [Option<Item>; 10] = [const { None }; 10];
-                items[0] = Some(Item::new(1, Some(ItemType::Tool(ToolType::Attacker())), String::from("Attack"), 1));
-                items[1] = Some(Item::new(2, Some(ItemType::Tool(ToolType::Breaker(vec![]))), String::from("Break"), 2));
-                items[2] = Some(Item::new(3, Some(ItemType::Block(1)), String::from("Build"), 1));
-                items[3] = Some(Item::new(4, Some(ItemType::Block(88)), String::from("Light"), 128));
+                items[0] = Some(Item::new(1, Some(ItemType::Tool(ToolType::Attacker())), String::from("Attack"), 1, 0));
+                items[1] = Some(Item::new(2, Some(ItemType::Tool(ToolType::Breaker(vec![]))), String::from("Break"), 2, 0));
+                items[2] = Some(Item::new(3, Some(ItemType::Block(1)), String::from("Build"), 1, 0));
+                items[3] = Some(Item::new(4, Some(ItemType::Block(88)), String::from("Light"), 128, 0));
                 items
             },
             inventory: Default::default(),
@@ -79,11 +91,11 @@ impl Inventory {
         match & self.hot_bar[self.selected_item] {
             Some(Item { item_type: Some(ItemType::Tool(ToolType::Breaker(_can_break))), .. }) => {
                 let tile = tile_map.get_tile(tile_x, tile_y, 0);
-                let tile_texture_id = TILE_DROPS.iter().find(|tile_drop| tile_drop.parent_tile == tile);
+                let tile_texture_id = TILE_DROPS.iter().find(|tile_drop| tile_drop.parent_tile.iter().any(|t| *t == tile));
                 if let Some(tile) = tile_texture_id {
                     let drops = tile.get_dropped_tile_info(rand_state);
                     for drop in drops {
-                        entity_manager.new_drop(ItemDrop::Tile(drop.1), ((tile_x + 1) * 8 + 2) as u32, ((tile_y + 1) * 8 + 2) as u32);
+                        entity_manager.new_drop(ItemDrop::Tile(drop.1, drop.0), ((tile_x + 1) * 8 + 2) as u32, ((tile_y + 1) * 8 + 2) as u32);
                     }
                 }
                 tile_map.change_tile(tile_x, tile_y, 0, 0)?;
@@ -113,7 +125,66 @@ impl Inventory {
         Ok(())
     }
 
-    pub fn update_key_events(&mut self, timer: &Timer, event_handler: &EventHandler, tile_map: &mut tile_map::TileMap, screen_size: (u32, u32), key_bindings: &super::player::KeyBindings, ui_manager: &mut PlayerUiManager) -> Result<(), GameError> {
+    pub fn add_item(&mut self, item: ItemDrop) -> Option<ItemDrop> {
+        // checking if it's somewhere in the inventory already
+        if !self.inventory.iter_mut().any(|row| {
+            row.iter_mut().any(|slot_item| {
+                match &item {
+                    ItemDrop::Tile(_, item) => {
+                        match slot_item {
+                            Some( Item {
+                                item_type: Some(ItemType::Block(block_id)),
+                                item_count,
+                                max_item_count,
+                                ..
+                            } ) if *item_count < *max_item_count && match &item.item_type {
+                                Some(item_type) => {
+                                    item_type == &ItemType::Block(*block_id)
+                                },
+                                _ => false,
+                            } => {
+                                *item_count += 1;
+                                true
+                            },
+                            _ => { false },
+                        }
+                    },
+                    _ => { false }
+                }
+            })
+        }) {
+            if self.inventory.iter_mut().any(|row| {
+                row.iter_mut().any(|slot_item| {
+                    if slot_item.is_none() {
+                        match &item {
+                            ItemDrop::Tile(_texture_id, item) => {
+                                *slot_item = Some(item.clone());
+                                true
+                            }
+                            _ => { false }
+                        }
+                    } else { false }
+                })
+            }) {
+                return None;
+            }
+        } else {
+            return None;
+        }
+        return Some(item);
+    }
+
+    pub fn update_key_events(
+        &mut self,
+        timer: &Timer,
+        event_handler: &EventHandler,
+        tile_map: &mut tile_map::TileMap,
+        screen_size: (u32, u32),
+        key_bindings: &super::player::KeyBindings,
+        ui_manager: &mut PlayerUiManager,
+        entity_manager: &mut EntityManager,
+        player_position: &(f32, f32),
+    ) -> Result<(), GameError> {
         for (index, key) in [
             sdl2::keyboard::Keycode::NUM_1, sdl2::keyboard::Keycode::NUM_2,
             sdl2::keyboard::Keycode::NUM_3, sdl2::keyboard::Keycode::NUM_4,
@@ -124,6 +195,24 @@ impl Inventory {
             if event_handler.keys_pressed.contains(key) {
                 self.selected_item = index;
             }
+        }
+
+        let mut i = 0;
+        while i < entity_manager.drops.len() {
+            let (_drop, pos_x, pos_y, alive_duration) = &mut entity_manager.drops[i];
+            let dif_x = *pos_x as f32 - player_position.0;
+            let dif_y = *pos_y as f32 - player_position.1;
+            *alive_duration -= timer.delta_time;
+            if *alive_duration <= 0.0 {
+                entity_manager.drops.remove(i);  // despawned
+                continue;
+            }
+            if dif_x*dif_x + dif_y*dif_y < 100.0 {
+                let (drop, _, _, _) = entity_manager.drops.remove(i);
+                self.add_item(drop);
+                continue;
+            }
+            i += 1;
         }
 
         let raw_keys_down = event_handler.keys_pressed.iter().map(|k| **k).collect::<Vec<_>>();
