@@ -28,11 +28,13 @@ static MINIMUM_WINDOW_WIDTH: u32 = 1200;
 /// The minimum size of the window (mostly so ui doesn't get completely messed up)
 static MINIMUM_WINDOW_HEIGHT: u32 = 750;
 
+static GAME_VERSION: &'static str = "0.0.1-alpha";
+
 pub fn start(logs: &mut Logs) -> Result<(), String> {
     // todo! temporary just to handle the game for now, no menues or anything (umm..... it does have some ui now... but we'll go with that)
     //     *temporary apparently means permanent? Either way, it's here to stay
-    let mut game = Game::new(logs)?;
-    //let mut game = Game::from_save(logs, "world_saves/testing_world", "0.0.1-alpha")?;
+    //let mut game = Game::new(logs)?;
+    let mut game = Game::from_save(logs, "world_saves/testing_world", GAME_VERSION)?;
 
     // Initialize SDL2
     let sdl = sdl2::init()?;
@@ -366,8 +368,8 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
 
     logs.save()?;
 
-    //game.save("world_saves/testing_world", "0.0.1-alpha").map_err(|e| format!("{:?}", e))?;
-    //println!("Saved game file");
+    game.save("world_saves/testing_world", GAME_VERSION, logs).map_err(|e| format!("{:?}", e))?;
+    println!("Saved game file");
 
     Ok(())
 }

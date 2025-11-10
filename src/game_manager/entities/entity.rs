@@ -1,6 +1,6 @@
 use crate::textures::sprite::Sprite;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Entity<T>
     where T: Into<u8> + From<u8> + Default + Copy
 {

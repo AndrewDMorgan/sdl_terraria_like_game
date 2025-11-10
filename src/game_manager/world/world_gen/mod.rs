@@ -3,7 +3,7 @@ use fastnoise_lite::{FastNoiseLite, NoiseType, FractalType};
 use crate::{game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, STONE_IDS, TILE_LIGHTS, TileMapError}, logging::logging::LoggingError};
 
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct WorldGenerator {
     //
 }

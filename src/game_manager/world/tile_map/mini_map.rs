@@ -2,7 +2,7 @@ use crate::{game_manager::entities::player::player::CameraTransform, logging::lo
 
 static MAX_MAP_TEXTURES: usize = u16::MAX as usize;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct MiniMap {
     lighting: Vec<Vec<f32>>,
     mini_map_textures: Vec<[u32; 16]>,  // 4x4   todo! move this out of here so it doesn't need to be saved and loaded through the game save state

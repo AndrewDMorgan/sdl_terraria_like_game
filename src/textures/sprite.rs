@@ -1,7 +1,7 @@
 use crate::{textures::animation::Animator, utill::Union};
 
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Hitbox {
     pub offset: (f64, f64),
     pub size: (f64, f64),
@@ -15,7 +15,7 @@ impl Hitbox {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Sprite<T>
     where T: Into<u8> + From<u8> + Default + Copy
 {

@@ -2,7 +2,7 @@ use crate::game_manager::entities::player::{items::Item, player::CameraTransform
 
 static DEFAULT_ITEM_LIFETIME: f64 = 60.0 * 12.0;  // 12 minutes (should be fine)
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(bincode::Encode, bincode::Decode, Clone)]
 pub struct EntityManager {
     pub drops: Vec<(ItemDrop, u32, u32, f64)>,  // the f64 is the alive for duration
 }
@@ -42,7 +42,7 @@ impl EntityManager {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(bincode::Encode, bincode::Decode, Clone)]
 pub enum ItemDrop {
     Tile (u32, Item),
 }

@@ -48,7 +48,7 @@ impl TileDrop {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Inventory {
     // the user's inventory is 10 wide for hotbar, with the inventory being 4 rows of 10
     selected_item: usize,
@@ -74,10 +74,11 @@ impl Inventory {
         }
     }
 
-    fn clicked_inventory(&self, mouse_position: (u32, u32)) -> bool {
-        mouse_position.0 >= 50 && mouse_position.0 <= 40 * 10 + 50 && mouse_position.1 >= 150 && mouse_position.1 <= 50 * 4 + 150
+    fn clicked_inventory(&self, mouse_position: (u32, u32), inventory_open: bool) -> bool {
+        if inventory_open { mouse_position.0 >= 25 && mouse_position.0 <= 40 * 10 + 50 && mouse_position.1 <= 50 * 4 + 150 }
+        else { mouse_position.0 >= 25 && mouse_position.0 <= 40 * 10 + 50 && mouse_position.1 <= 80 }
     }
-
+    
     pub fn left_click_item(
         &mut self,
         tile_x: usize,
@@ -89,7 +90,7 @@ impl Inventory {
         rand_state: &mut dyn rand::RngCore
     ) -> Result<(), GameError> {
         let inventory_open = ui_manager.ui_elements.iter().any(|e| e.identifier == "Inventory");
-        if inventory_open && self.clicked_inventory(event_handler.mouse.position) { return Ok(()); }
+        if self.clicked_inventory(event_handler.mouse.position, inventory_open) { return Ok(()); }
         match & self.hot_bar[self.selected_item] {
             Some(Item { item_type: Some(ItemType::Tool(ToolType::Breaker(_can_break))), .. }) => {
                 let tile = tile_map.get_tile(tile_x, tile_y, 0);
@@ -117,7 +118,7 @@ impl Inventory {
         _entity_manager: &mut EntityManager
     ) -> Result<(), GameError> {
         let inventory_open = ui_manager.ui_elements.iter().any(|e| e.identifier == "Inventory");
-        if inventory_open && self.clicked_inventory(event_handler.mouse.position) { return Ok(()); }
+        if self.clicked_inventory(event_handler.mouse.position, inventory_open) { return Ok(()); }
         match self.hot_bar[self.selected_item] {
             Some(Item { item_type: Some(ItemType::Block(id)), .. }) => {
                 tile_map.change_tile(tile_x, tile_y, 0, id as u32)?;

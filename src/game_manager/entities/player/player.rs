@@ -10,7 +10,7 @@ use crate::textures::animation::Animator;
 use crate::textures::sprite::{Hitbox, Sprite};
 
 #[repr(u8)]
-#[derive(serde::Serialize, serde::Deserialize, Copy, Clone, Default)]
+#[derive(bincode::Encode, bincode::Decode, Copy, Clone, Default)]
 pub enum PlayerAnimation {
     #[default] Idle = 0,
 }
@@ -30,7 +30,7 @@ impl From<u8> for PlayerAnimation {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct KeyBindings {
     pub inventory: Vec<KeyBind>,
     pub left: Vec<KeyBind>,
@@ -48,19 +48,19 @@ impl KeyBindings {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub enum KeyBind {
     Key(i32),
     Mod(u16),
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct PlayerData {
     pub inventory: Inventory,
 }
 
 /// The player entity module
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Player {
     pub camera: CameraTransform,
     pub entity: Entity<PlayerAnimation>,
@@ -173,7 +173,7 @@ impl Player {
                 self.camera.zoom -= 0.075 * timer.delta_time as f32;
             }
         }
-
+        
         // tempory tile deletion
         if let ButtonState::Pressed | ButtonState::Held = event_handler.mouse.left {
             let mouse_x = self.camera.x - screen_size.0 as f32 * 0.5 * self.camera.zoom + event_handler.mouse.position.0 as f32 * self.camera.zoom;
@@ -259,7 +259,7 @@ impl Player {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(bincode::Encode, bincode::Decode, Clone)]
 pub struct CameraTransform {
     pub x: f32,
     pub y: f32,

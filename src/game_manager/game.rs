@@ -27,47 +27,49 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn save(&self, path_prefix: &str, version: &str) -> Result<(), serde_json::Error> {
-        let file = std::fs::File::create(&format!("{}/game_version_{}/player/player.json", path_prefix, version)).unwrap();
-        serde_json::to_writer(file, &self.player)?;
+    pub fn save(&self, path_prefix: &str, version: &str, logs: &mut Logs) -> Result<(), std::io::Error> {
+        let start = std::time::Instant::now();
+        let config = bincode::config::standard();
+        let encoded: Vec<u8> = bincode::encode_to_vec(&self.player, config).unwrap();
+        std::fs::write(format!("{}/game_version_{}/player/player.bin", path_prefix, version), &encoded)?;  // just dump to file
 
-        let file = std::fs::File::create(&format!("{}/game_version_{}/world_save/tile_map.json", path_prefix, version)).unwrap();
-        serde_json::to_writer(file, &self.tile_map)?;
+        let encoded: Vec<u8> = bincode::encode_to_vec(&self.tile_map, config).unwrap();
+        std::fs::write(format!("{}/game_version_{}/world_save/tile_map.bin", path_prefix, version), &encoded)?;  // just dump to file
 
-        let file = std::fs::File::create(&format!("{}/game_version_{}/world_save/world_generator.json", path_prefix, version)).unwrap();
-        serde_json::to_writer(file, &self.world_generator)?;
+        let encoded: Vec<u8> = bincode::encode_to_vec(&self.world_generator, config).unwrap();
+        std::fs::write(format!("{}/game_version_{}/world_save/world_generator.bin", path_prefix, version), &encoded)?;  // just dump to file
 
-        let file = std::fs::File::create(&format!("{}/game_version_{}/world_save/entities/entity.json", path_prefix, version)).unwrap();
-        serde_json::to_writer(file, &self.entity_manager)?;
+        let encoded: Vec<u8> = bincode::encode_to_vec(&self.entity_manager, config).unwrap();
+        std::fs::write(format!("{}/game_version_{}/world_save/entities/entity.bin", path_prefix, version), &encoded)?;  // just dump to file
+
+        logs.push(Log {
+            message: format!("Saved game in {} seconds", start.elapsed().as_secs_f64()),
+            level: crate::logging::logging::LoggingError::Info
+        }, 62, LogType::Information);
 
         Ok(())
     }
 
     // the version parameter should hopefully make it easier to update old saves into newer versions by targeting them specifically
-    fn file_loader<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, GameError> {
-        match std::fs::File::open(path) {
-            Ok(data) => {
-                let reader = std::io::BufReader::new(data);
-                Ok(serde_json::from_reader::<_, T>(reader).map_err(|e| {
-                    GameError {
-                        message: format!("Failed to deserialize file: {}\nError: {:?}", path, e),
-                        severity: Severity::Fatal,
-                    }
-                })?)
-            },
-            _ => Err(GameError {
-                message: format!("Failed to open file: {}", path),
-                severity: Severity::Fatal,
-            }),
-        }
+    fn file_loader<T: bincode::Decode<()>>(path: &str) -> Result<T, GameError> {
+        let config = bincode::config::standard();
+        let data = std::fs::read(path).map_err(|e| GameError {
+            message: format!("Failed to deserialize file: {}\nError: {:?}", path, e),
+            severity: Severity::Fatal,
+        })?;
+        let (decoded, _len): (T, usize) = bincode::decode_from_slice(&data, config).map_err(|e| GameError {
+            message: format!("Failed to deserialize file: {}\nError: {:?}", path, e),
+            severity: Severity::Fatal,
+        })?;
+        Ok(decoded)
     }
 
     // the version parameter should hopefully make it easier to update old saves into newer versions by targeting them specifically
     pub fn from_save(logs: &mut Logs, path_prefix: &str, version: &str) -> Result<Self, GameError> {
-        let player = Self::file_loader(&format!("{}/game_version_{}/player/player.json", path_prefix, version))?;
-        let tile_map = Self::file_loader(&format!("{}/game_version_{}/world_save/tile_map.json", path_prefix, version))?;
-        let world_generator = Self::file_loader(&format!("{}/game_version_{}/world_save/world_generator.json", path_prefix, version))?;
-        let entity = Self::file_loader(&format!("{}/game_version_{}/world_save/entities/entity.json", path_prefix, version))?;
+        let player = Self::file_loader(&format!("{}/game_version_{}/player/player.bin", path_prefix, version))?;
+        let tile_map = Self::file_loader(&format!("{}/game_version_{}/world_save/tile_map.bin", path_prefix, version))?;
+        let world_generator = Self::file_loader(&format!("{}/game_version_{}/world_save/world_generator.bin", path_prefix, version))?;
+        let entity = Self::file_loader(&format!("{}/game_version_{}/world_save/entities/entity.bin", path_prefix, version))?;
         Ok(Game {
             player,
             tile_map,

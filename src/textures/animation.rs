@@ -1,5 +1,5 @@
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Animator<T>
     where T: Into<u8> + From<u8> + Default + Copy
 {

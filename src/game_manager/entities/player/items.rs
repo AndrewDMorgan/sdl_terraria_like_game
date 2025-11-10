@@ -1,19 +1,19 @@
 use rand::Rng;
 
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(bincode::Encode, bincode::Decode, Clone, PartialEq)]
 pub enum ItemType {
     Block (usize),
     Tool (ToolType),
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(bincode::Encode, bincode::Decode, Clone, PartialEq)]
 pub enum ToolType {
     Breaker (Vec<usize>),
     Attacker (),
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(bincode::Encode, bincode::Decode, Clone)]
 pub struct Item {
     pub item_type: Option<ItemType>,
     pub item_count: usize,

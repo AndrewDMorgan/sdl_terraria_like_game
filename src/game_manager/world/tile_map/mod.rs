@@ -17,7 +17,7 @@ pub static SOLID_TILES: &[&[u32]] = &[
     STONE_IDS,
 ];
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct EntityLight {
     pub(crate) position: (f32, f32),
     pub(crate) color: (u8, u8, u8, f32),
@@ -53,7 +53,7 @@ impl From<TileMapError> for String {
     }
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct TileMap {
     pub tiles: Vec<Vec<[u32; 3]>>,
     lighting: Vec<Vec<[u8; 3]>>,
@@ -420,7 +420,7 @@ fn fract(value: f32) -> f32 {
     value - value.floor()
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct TileMapManager {
     tile_maps: [Option<TileMap>; Dimension::TOTAL as usize],
 }
@@ -449,7 +449,7 @@ impl TileMapManager {
 }
 
 #[repr(u32)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub enum Dimension {
     Overworld = 0,
     
