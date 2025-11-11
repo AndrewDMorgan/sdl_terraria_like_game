@@ -14,17 +14,8 @@ pub struct PlayerUiManager {
 }
 
 impl PlayerUiManager {
-    pub fn new(item_textures: Vec<[u32; 256]>, logs: &mut crate::logging::logging::Logs) -> Result<Self, crate::textures::textures::TextureError> {
+    pub fn new(item_textures: Vec<[u32; 256]>, logs: &mut crate::logging::logging::Logs, font_atlas: Rc<Vec<[u32; 256]>>) -> Result<Self, crate::textures::textures::TextureError> {
         let item_textures = Rc::new(item_textures);
-        let font_atlas = Rc::new({
-            let mut total_textures_loaded = 0;
-            let atlas = get_texture_atlas::<MAX_FONT_CHARACTERS, 256>("textures/fonts/user_default/", (16, 16), vec![[0u32; 256]; MAX_FONT_CHARACTERS], &mut total_textures_loaded)?;
-            logs.push(Log {
-                message: format!("Loaded {} font characters for the player ui rendering.", total_textures_loaded - 1),
-                level: crate::logging::logging::LoggingError::Info
-            }, 20, LogType::Information);
-            atlas
-        });
         Ok(Self {
             ui_elements: vec![
                 // creating the hotbar

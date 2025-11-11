@@ -4,10 +4,11 @@ use sdl2::video::WindowContext;
 use sdl2::rect::Rect;
 use metal::*;
 
+use crate::core::rendering::ui_state::menues::GameStateManager;
 use crate::logging::logging::LoggingError;
-use crate::logging::{logging as logger, logging::{Logging, Log, Logs}};
-use crate::game_manager::game::{Game, GameError, Severity};
-use crate::shaders::shader_handler::{ShaderError, Tuple};
+use crate::logging::{logging as logger, logging::{Log, Logs}};
+use crate::game_manager::game::{GameError, Severity};
+use crate::shaders::shader_handler::{ShaderError};
 
 use crate::core::event_handling::*;
 pub(crate) mod event_handling;
@@ -33,9 +34,10 @@ static GAME_VERSION: &'static str = "0.0.1-alpha";
 pub fn start(logs: &mut Logs) -> Result<(), String> {
     // todo! temporary just to handle the game for now, no menues or anything (umm..... it does have some ui now... but we'll go with that)
     //     *temporary apparently means permanent? Either way, it's here to stay
-    //let mut game = Game::new(logs)?;
-    let mut game = Game::from_save(logs, "world_saves/testing_world", GAME_VERSION)?;
-
+    let mut game_manager = GameStateManager::new(logs)?;  // handles everything, making it easier to have multiple menue states and
+    // current save: Some("testing_world".to_string())
+    game_manager.start_game(None, logs, GAME_VERSION)?;
+    
     // Initialize SDL2
     let sdl = sdl2::init()?;
     let video = sdl.video()?;
@@ -84,7 +86,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     'running: loop {
         // handling events
         timer.start_new_frame();
-        let status = event_handler.handle_events(&mut event_pump, &mut Some(&mut game), &timer);
+        let status = game_manager.handle_events(&mut event_handler, &mut event_pump, &mut timer, logs);
         match status {
             event_handler::Status::Continue => {},
             event_handler::Status::Quit => break 'running,
@@ -145,27 +147,15 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
         let gpu_start = timer.elapsed_frame().as_secs_f64();
         let mut updating_error: Result<(), GameError> = Ok(());
         let buffer_result: Result<(), ShaderError> = surface_texture.with_lock(None, |pixels, pitch| {
-            let grid_size = MTLSize {
-                width: window_size.0 as NSUInteger,
-                height: window_size.1 as NSUInteger,
-                depth: 1,
-            };
-            let threadgroup_size = MTLSize {
-                width: 16,
-                height: 16,
-                depth: 1,
-            };
-
             buffer_upload_start = timer.elapsed_frame().as_secs_f64();
 
-            let shader = shader_handler.get_shader(shader_handler::ShaderContext::GameLoop);
+            let mut shader = shader_handler.get_shader(shader_handler::ShaderContext::GameLoop);
             shader.update_buffer(0, pitch as u64)?;
             shader.update_buffer(1, window_size.0 as u64)?;
             shader.update_buffer(2, window_size.1 as u64)?;
 
             let mut entities: Vec<Vec<(u32, u16, i16, i16, u16, u32)>> = vec![];
-            entities.push(game.player.get_model());
-            entities.push(game.entity_manager.get_render(&game.player.camera, window_size));
+            game_manager.update_entities(&mut entities, window_size);
             if entities.len() >= MAX_ENTITIES {
                 logs.push(Log {
                     message: format!("[Memory Warning] Entities surpassed maximum GPU buffer size; length of {}", entities.len()),
@@ -199,94 +189,27 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
             //        8 bits for font size
             //        8 bits for the length of the character buffer
             */
-            let text_buffer = vec![
-                {
-                    let input_text = format!(
-                        "({},{})",
-                        (game.player.entity.position.0 / 8.0) as usize,
-                        match game.get_tilemap_manager().get_current_map(crate::game_manager::world::tile_map::Dimension::Overworld) {
-                            Some(tile_map) => (tile_map.get_map_height() - 1) as usize,
-                            None => 0,
-                        } - (game.player.entity.position.1 / 8.0) as usize
-                    );
-                    Tuple {
-                        first:
-                            100u128 << 112 |  // x offset
-                            90u128  << 96  |  // y offset
-                            ((u16::MAX as u128) << 48) |  // color
-                            16u128  << 8   |  // font size
-                            input_text.len() as u128,  // buffer size
-                        second: {
-                            let mut text = [0u8; 32];
-                            for (i, char) in input_text.chars().enumerate() {
-                                text[i] = char as u8;
-                            }
-                            text
-                        },
-                    }
-                }
-            ];
+            let mut text_buffer = vec![];
+            game_manager.update_text_buffer(&mut text_buffer);
             shader.update_buffer(14, text_buffer.len() as u32)?;
             shader.update_buffer_slice(15, &text_buffer)?;
 
-            // getting the tilemap slice to render
-            let camera = &game.player.camera.clone();  // the struct is only a couple 32 bit floats or whatever, so not too expensive to clone
-            match game.get_tilemap_manager().get_current_map(crate::game_manager::world::tile_map::Dimension::Overworld) {
-                Some(tile_map) => {
-                    let (map, offset_transform, visible_size) = tile_map.get_render_slice(
-                        camera,
-                        window_size,
-                    );
-                    shader.update_buffer_slice(8, &map)?;
-                    shader.update_buffer(6, visible_size.0)?;
-                    shader.update_buffer(7, visible_size.1)?;
-                    let transform = shader_handler::Float4::new(offset_transform.x, offset_transform.y, offset_transform.zoom, 0.0);
-                    shader.update_buffer(9, transform)?;
-                },
-                _ => {
-                    // if there's none, do this?
-                    shader.update_buffer_slice::<&[u32]>(8, &[])?;
-                    logs.push(Log {
-                        message: format!("[Render Warning] No tile map found for rendering in current dimension."),
-                        level: LoggingError::Warning,
-                    }, 15, logger::LogType::Warning);
-                }
-            }
-
-            shader.update_buffer_slice(18, pixels)?;
-
-            buffer_upload_end = timer.elapsed_frame().as_secs_f64();
-            shader_render_pass_time_start = timer.elapsed_frame().as_secs_f64();
-
-            updating_error = shader.execute(
-                grid_size,
-                threadgroup_size,
-                Some(Box::new(|| {
-                    start_of_event_handling = timer.elapsed_frame().as_secs_f64();
-                    // anything here will run concurrently to the gpu rendering (maybe update tiles or something?)
-                    // this is a dyn fn once so it should be able to barrow external variables just fine
-                    // this is a slightly odd setup for me; usually I update entities than render, not render than update
-                    //    technically speaking, because the gpu requires non-mutating data, even though the updating is
-                    //    concurrently happening, it's using the old state of the game, so it kinda does act as render than update
-                    game.update_key_events(&timer, &event_handler, window_size, logs)?;
-
-                    elapsed_for_event_handling = timer.elapsed_frame().as_secs_f64();
-                    Ok(())
-                }))
-            );
-            let out_ptr = shader.get_buffer_contents(18);
-            let out_slice = unsafe { std::slice::from_raw_parts(out_ptr, pixels.len()) };
-            pixels.copy_from_slice(out_slice);
-
-            shader_render_pass_time_end = timer.elapsed_frame().as_secs_f64();
-            ui_rendering_time_start = timer.elapsed_frame().as_secs_f64();
-
-            // rendering ui stuff
-            game.render_ui(pixels, window_size, pitch).map_err(|e| {
-                ShaderError::new(
-                    format!("[Ui Error] Error while rendering ui: {:?}", e)
-                )
-            })?;
+            game_manager.execute_shader(
+                &mut event_handler,
+                window_size,
+                pixels,
+                &mut shader,
+                logs,
+                &mut updating_error,
+                &mut timer,
+                pitch,
+                &mut buffer_upload_end,
+                &mut shader_render_pass_time_start,
+                &mut shader_render_pass_time_end,
+                &mut ui_rendering_time_start,
+                &mut start_of_event_handling,
+                &mut elapsed_for_event_handling,
+            )?;
 
             ui_rendering_time_end = timer.elapsed_frame().as_secs_f64();
             
@@ -355,7 +278,12 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
                 t5 * 1000.0,  // present
             );
             logs.push(Log {
-                message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}\n * entity count: {}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text, game.entity_manager.get_entity_count()),
+                message: format!("[Performance Warning] Frame took too long ( > {:.2}ms  i.e.  < {}fps ).\n{}\n * entity count: {}", logger::PERFORMANCE_LOG_THRESHOLD * 1000.0, 1. / logger::PERFORMANCE_LOG_THRESHOLD, text, {
+                    match &game_manager.game {
+                        Some(game) => game.entity_manager.get_entity_count(),
+                        None => 0,
+                    }
+                }),
                 level: LoggingError::Warning,
             }, 18, logger::LogType::Performance);
         }
@@ -368,8 +296,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
 
     logs.save()?;
 
-    game.save("world_saves/testing_world", GAME_VERSION, logs).map_err(|e| format!("{:?}", e))?;
-    println!("Saved game file");
+    game_manager.close_game_session(GAME_VERSION, logs)?;
 
     Ok(())
 }

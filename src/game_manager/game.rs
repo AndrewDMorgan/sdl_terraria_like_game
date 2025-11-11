@@ -1,4 +1,4 @@
-use std::char::MAX;
+use std::rc::Rc;
 
 use crate::game_manager::entities::manager::EntityManager;
 use crate::game_manager::entities::player::{player::*, player_ui::PlayerUiManager};
@@ -12,6 +12,8 @@ static MAX_ITEM_TEXTURES: usize = u16::MAX as usize;
 
 static MAX_BLOCK_ITEM_TEXTURES: usize = u16::MAX as usize;
 
+static MAX_MAP_TEXTURES: usize = u16::MAX as usize;
+
 /// The main game structure
 pub struct Game {
     pub player: Player,
@@ -19,11 +21,13 @@ pub struct Game {
     world_generator: WorldGenerator,
 
     // if a lot of unique ui elements are added, this could be abstracted into its own ui manager struct
-    player_ui_manager: PlayerUiManager,  // storing this external to player since it can't be saved (and really doesn't need to be)
+    pub player_ui_manager: PlayerUiManager,  // storing this external to player since it can't be saved (and really doesn't need to be)
 
     pub(crate) entity_manager: EntityManager,
 
     pub(crate) random_state: rand::rngs::ThreadRng,
+
+    mini_map_textures: Vec<[u32; 16]>,
 }
 
 impl Game {
@@ -65,11 +69,11 @@ impl Game {
     }
 
     // the version parameter should hopefully make it easier to update old saves into newer versions by targeting them specifically
-    pub fn from_save(logs: &mut Logs, path_prefix: &str, version: &str) -> Result<Self, GameError> {
-        let player = Self::file_loader(&format!("{}/game_version_{}/player/player.bin", path_prefix, version))?;
-        let tile_map = Self::file_loader(&format!("{}/game_version_{}/world_save/tile_map.bin", path_prefix, version))?;
-        let world_generator = Self::file_loader(&format!("{}/game_version_{}/world_save/world_generator.bin", path_prefix, version))?;
-        let entity = Self::file_loader(&format!("{}/game_version_{}/world_save/entities/entity.bin", path_prefix, version))?;
+    pub fn from_save(logs: &mut Logs, path_prefix: &str, version: &str, font_atlas: Rc<Vec<[u32; 256]>>) -> Result<Self, GameError> {
+        let player: Player = Self::file_loader(&format!("{}/game_version_{}/player/player.bin", path_prefix, version))?;
+        let tile_map: TileMapManager = Self::file_loader(&format!("{}/game_version_{}/world_save/tile_map.bin", path_prefix, version))?;
+        let world_generator: WorldGenerator = Self::file_loader(&format!("{}/game_version_{}/world_save/world_generator.bin", path_prefix, version))?;
+        let entity: EntityManager = Self::file_loader(&format!("{}/game_version_{}/world_save/entities/entity.bin", path_prefix, version))?;
         Ok(Game {
             player,
             tile_map,
@@ -86,16 +90,31 @@ impl Game {
                     level: crate::logging::logging::LoggingError::Info,
                 }, 11, LogType::Information);
                 textures
-            }, logs).map_err(|e| GameError {
+            }, logs, font_atlas).map_err(|e| GameError {
                 message: e.details,
                 severity: Severity::Fatal
             })?,
             entity_manager: entity,
             random_state: rand::rng(),
+            mini_map_textures: {
+                let mut total_textures_loaded = 0;
+                let textures = get_texture_atlas::<MAX_MAP_TEXTURES, 16>(
+                    "textures/map_tiles/", (4, 4), vec![Default::default(); MAX_MAP_TEXTURES], &mut total_textures_loaded
+                );
+                total_textures_loaded -= 1;
+                logs.push(Log {
+                    message: format!("Loaded {} tile textures for the mini-map.", total_textures_loaded),
+                    level: crate::logging::logging::LoggingError::Info,
+                }, 52, crate::logging::logging::LogType::Information);
+                textures.map_err(|e| GameError {
+                    message: format!("{:?}", e),
+                    severity: Severity::Fatal
+                })?
+            },
         })
     }
 
-    pub fn new(logs: &mut Logs) -> Result<Self, GameError> {
+    pub fn new(logs: &mut Logs, font_atlas: Rc<Vec<[u32; 256]>>) -> Result<Self, GameError> {
         let world_generator = WorldGenerator::new();
         let mut tile_map_manager = TileMapManager::new();
         // todo! temporary for now; eventually a world creation menue will be added
@@ -122,12 +141,27 @@ impl Game {
                     level: crate::logging::logging::LoggingError::Info,
                 }, 10, LogType::Information);
                 textures
-            }, logs).map_err(|e| GameError {
+            }, logs, font_atlas).map_err(|e| GameError {
                 message: e.details,
                 severity: Severity::Fatal
             })?,
             entity_manager: EntityManager::new(),
             random_state: rand::rng(),
+            mini_map_textures: {
+                let mut total_textures_loaded = 0;
+                let textures = get_texture_atlas::<MAX_MAP_TEXTURES, 16>(
+                    "textures/map_tiles/", (4, 4), vec![Default::default(); MAX_MAP_TEXTURES], &mut total_textures_loaded
+                );
+                total_textures_loaded -= 1;
+                logs.push(Log {
+                    message: format!("Loaded {} tile textures for the mini-map.", total_textures_loaded),
+                    level: crate::logging::logging::LoggingError::Info,
+                }, 52, crate::logging::logging::LogType::Information);
+                textures.map_err(|e| GameError {
+                    message: format!("{:?}", e),
+                    severity: Severity::Fatal
+                })?
+            },
         })
     }
 
@@ -227,7 +261,9 @@ impl Game {
         if let Some(map) = self.tile_map.get_current_map(Dimension::Overworld) {
             map.mini_map.camera_transform.x = camera_x;
             map.mini_map.camera_transform.y = camera_y;
-            map.mini_map.render(&map.tiles, buffer, (350, 200), (window_size.0 as usize - 375, 25), pitch);
+            map.mini_map.render(
+                &map.tiles,buffer, (350, 200), (window_size.0 as usize - 375, 25), pitch, &self.mini_map_textures
+            );
         }
 
         Ok(())
