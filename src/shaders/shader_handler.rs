@@ -168,7 +168,7 @@ impl Shader {
 /// Represents an error that occurred while handling shaders
 #[derive(Debug)]
 pub struct ShaderError {
-    details: String,
+    pub(crate) details: String,
 }
 
 impl ShaderError {

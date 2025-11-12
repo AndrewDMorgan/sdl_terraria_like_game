@@ -1,6 +1,5 @@
 use rand::Rng;
 
-
 #[derive(bincode::Encode, bincode::Decode, Clone, PartialEq)]
 pub enum ItemType {
     Block (usize),

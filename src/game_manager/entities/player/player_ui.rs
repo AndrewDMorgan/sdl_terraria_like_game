@@ -1,9 +1,6 @@
 use crate::{core::rendering::ui::UiElement,
-            game_manager::entities::player::{inventory::generate_player_hotbar_ui_element, player::PlayerData},
-            logging::logging::{Log, LogType}, textures::textures::get_texture_atlas};
+            game_manager::entities::player::{inventory::generate_player_hotbar_ui_element, player::PlayerData}};
 use std::rc::Rc;
-
-static MAX_FONT_CHARACTERS: usize = u16::MAX as usize;
 
 #[derive(Default)]
 pub struct PlayerUiManager {
@@ -14,7 +11,7 @@ pub struct PlayerUiManager {
 }
 
 impl PlayerUiManager {
-    pub fn new(item_textures: Vec<[u32; 256]>, logs: &mut crate::logging::logging::Logs, font_atlas: Rc<Vec<[u32; 256]>>) -> Result<Self, crate::textures::textures::TextureError> {
+    pub fn new(item_textures: Vec<[u32; 256]>, font_atlas: Rc<Vec<[u32; 256]>>) -> Result<Self, crate::textures::textures::TextureError> {
         let item_textures = Rc::new(item_textures);
         Ok(Self {
             ui_elements: vec![

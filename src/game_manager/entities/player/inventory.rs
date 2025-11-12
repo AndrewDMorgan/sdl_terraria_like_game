@@ -23,6 +23,36 @@ pub static TILE_DROPS: &[TileDrop] = &[
         drops_items: &[ItemGenerator::new((1, 1), 7, Some(ItemType::Block(88)), "Light", 512)],
         droped_textures: &[9],
     },
+    TileDrop {
+        parent_tile: &[173],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 8, Some(ItemType::Block(173)), "Torch", 512)],
+        droped_textures: &[10],
+    },
+    TileDrop {
+        parent_tile: &[137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 135],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 9, Some(ItemType::Block(137)), "Snow", 512)],
+        droped_textures: &[11],
+    },
+    TileDrop {
+        parent_tile: &[118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 10, Some(ItemType::Block(118)), "Ice", 512)],
+        droped_textures: &[12],
+    },
+    TileDrop {
+        parent_tile: &[89 , 90 , 91 , 92 , 93 , 94 , 95 , 96 , 97 , 98 , 99 , 100, 101, 102, 134],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 11, Some(ItemType::Block(89)), "Sand", 512)],
+        droped_textures: &[13],
+    },
+    TileDrop {
+        parent_tile: &[103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 133],
+        drop_chances: &[1.0],
+        drops_items: &[ItemGenerator::new((1, 1), 12, Some(ItemType::Block(103)), "Sandstone", 512)],
+        droped_textures: &[14],
+    },
 ];
 
 pub struct TileDrop {
@@ -62,10 +92,11 @@ impl Inventory {
             selected_item: 0,
             hot_bar: {
                 let mut items: [Option<Item>; 10] = [const { None }; 10];
-                items[0] = Some(Item::new(1, Some(ItemType::Tool(ToolType::Attacker())), String::from("Attack"), 1, 0));
-                items[1] = Some(Item::new(2, Some(ItemType::Tool(ToolType::Breaker(vec![]))), String::from("Break"), 2, 0));
-                items[2] = Some(Item::new(3, Some(ItemType::Block(1)), String::from("Build"), 1, 0));
-                items[3] = Some(Item::new(4, Some(ItemType::Block(88)), String::from("Light"), 128, 0));
+                items[0] = Some(Item::new(1, Some(ItemType::Tool(ToolType::Attacker())), String::from("Attack"), 1, 1));
+                items[1] = Some(Item::new(2, Some(ItemType::Tool(ToolType::Breaker(vec![]))), String::from("Break"), 2, 1));
+                items[2] = Some(Item::new(3, Some(ItemType::Block(1)), String::from("Build"), 1, 1));
+                items[3] = Some(Item::new(4, Some(ItemType::Block(88)), String::from("Light"), 128, 1));
+                items[4] = Some(Item::new(4, Some(ItemType::Block(173)), String::from("Torch"), 64, 1));
                 items
             },
             inventory: {

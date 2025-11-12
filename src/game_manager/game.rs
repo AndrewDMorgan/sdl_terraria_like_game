@@ -10,8 +10,6 @@ use crate::logging::logging::{Log, LogType, Logs};
 // the maximum item textures (in this context, this can safely be set to any value >= to the total texture count as no gpu buffers rely upon a static size for this)
 static MAX_ITEM_TEXTURES: usize = u16::MAX as usize;
 
-static MAX_BLOCK_ITEM_TEXTURES: usize = u16::MAX as usize;
-
 static MAX_MAP_TEXTURES: usize = u16::MAX as usize;
 
 /// The main game structure
@@ -90,7 +88,7 @@ impl Game {
                     level: crate::logging::logging::LoggingError::Info,
                 }, 11, LogType::Information);
                 textures
-            }, logs, font_atlas).map_err(|e| GameError {
+            }, font_atlas).map_err(|e| GameError {
                 message: e.details,
                 severity: Severity::Fatal
             })?,
@@ -141,7 +139,7 @@ impl Game {
                     level: crate::logging::logging::LoggingError::Info,
                 }, 10, LogType::Information);
                 textures
-            }, logs, font_atlas).map_err(|e| GameError {
+            }, font_atlas).map_err(|e| GameError {
                 message: e.details,
                 severity: Severity::Fatal
             })?,

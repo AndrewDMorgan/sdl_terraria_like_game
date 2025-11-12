@@ -6,15 +6,29 @@ use crate::logging::logging::{LoggingError, Logs};
 
 pub mod mini_map;
 
-pub static GRASS_IDS: &[u32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 47];
-pub static DIRT_IDS: &[u32] = &[15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 46];
-pub static STONE_IDS: &[u32] = &[30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45];
-pub static TILE_LIGHTS: &[(u32, [u8; 3])] = &[(88, [255, 255, 128])];
+pub static GRASS_IDS: &[u32]      = &[1  , 2  , 3  , 4  , 5  , 6  , 7  , 8  , 9  , 10 , 11 , 12 , 13 , 14 , 47 ];
+pub static DIRT_IDS: &[u32]       = &[15 , 16 , 17 , 18 , 19 , 20 , 21 , 22 , 23 , 24 , 25 , 26 , 27 , 28 , 29 , 46 ];
+pub static STONE_IDS: &[u32]      = &[30 , 31 , 32 , 33 , 34 , 35 , 36 , 37 , 38 , 39 , 40 , 41 , 42 , 43 , 44 , 45 ];
+pub static SAND_IDS: &[u32]       = &[89 , 90 , 91 , 92 , 93 , 94 , 95 , 96 , 97 , 98 , 99 , 100, 101, 102, 134];
+pub static SAND_STONE_IDS: &[u32] = &[103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 133];
+pub static ICE_IDS: &[u32]        = &[118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 136];
+pub static SNOW_IDS: &[u32]       = &[137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 135];
+pub static CACTUS_IDS: &[u32]     = &[153, 154, 155, 156, 157, 158, 159, 160, 161, 162];
+pub static WOOD_IDS: &[u32]       = &[163, 164, 165, 166, 167, 168, 169, 170, 171, 172];
+pub static TILE_LIGHTS: &[(u32, [u8; 3])] = &[
+    (88, [255, 255, 128]),
+    (173, [200, 200, 128])
+];
 
 pub static SOLID_TILES: &[&[u32]] = &[
     GRASS_IDS,
     DIRT_IDS,
     STONE_IDS,
+    SAND_IDS,
+    SAND_STONE_IDS,
+    ICE_IDS,
+    SNOW_IDS,
+    WOOD_IDS,
 ];
 
 #[derive(bincode::Encode, bincode::Decode)]
@@ -213,122 +227,28 @@ impl TileMap {
         for (x, y) in [(tile_x.saturating_sub(1), tile_y), (tile_x + 1, tile_y), (tile_x, tile_y.saturating_sub(1)), (tile_x, tile_y + 1)] {
             if x >= self.get_map_width() || tile_y >= self.get_map_height() { continue; }
             let tile = self.get_tile(x, y, layer);
-            if GRASS_IDS.contains(&tile) {  // grass
-                let tiles_outside = [
-                    self.get_tile(x.saturating_sub(1), y, layer),
-                    self.get_tile((x + 1).min(self.get_map_width() - 1), y, layer),
-                    self.get_tile(x, y.saturating_sub(1), layer),
-                    self.get_tile(x, (y + 1).min(self.get_map_height() - 1), layer),
-                ];
-                let tile_edges = [
-                    tiles_outside[0] == 0,
-                    tiles_outside[1] == 0,
-                    tiles_outside[2] == 0,
-                    tiles_outside[3] == 0,
-                ];
-                // left right up down
-                let new_tile = match tile_edges {
-                    [true, false, false, false] => 7,  // empty to left (wall facing to left)
-                    [false, true, false, false] => 8,  // empty to right (wall facing to right)
-                    [true, true, false, false]  => 10,  // empty to left and right (column)
-                    [false, false, true, false] => 1,  // empty above (normal)
-                    [false, false, false, true] => 47,  // empty below (upsidedown of normal)
-                    [false, false, true, true]  => 5,  // empty above and below (ceiling ig)
-
-                    [true, false, true, false]  => 2,  // empty to left and above (corner)
-                    [true, false, false, true]  => 4,  // empty to left and below (corner)
-                    [true, false, true, true]   => 13,  // empty to left above and below (cap facing left)
-
-                    [false, true, false, true]  => 9,  // empty to right and below (corner)
-                    [false, true, true, false]  => 3,  // empty to right and above (corner)
-                    [false, true, true, true]   => 6,  // empty to right above and below (cap facing right)
-
-                    [true, true, true, false]   => 11,  // empty to left, right and above (cap facing up)
-                    [true, true, false, true]   => 12,  // empty to left, right and below (cap facing down)
-                    [true, true, true, true]    => 14,  // surrounded
-
-                    _ => 29,  // dirt
-                };
-                *self.get_tile_mut(x, y, layer) = new_tile;
-            }
-
-            if DIRT_IDS.contains(&tile) {  // dirt
-                let tiles_outside = [
-                    self.get_tile(x.saturating_sub(1), y, layer),
-                    self.get_tile((x + 1).min(self.get_map_width() - 1), y, layer),
-                    self.get_tile(x, y.saturating_sub(1), layer),
-                    self.get_tile(x, (y + 1).min(self.get_map_height() - 1), layer),
-                ];
-                let tile_edges = [
-                    tiles_outside[0] == 0,
-                    tiles_outside[1] == 0,
-                    tiles_outside[2] == 0,
-                    tiles_outside[3] == 0,
-                ];
-                // left right up down
-                let new_tile = match tile_edges {
-                    [true, false, false, false] => 7  + 14,  // empty to left (wall facing to left)
-                    [false, true, false, false] => 8  + 14,  // empty to right (wall facing to right)
-                    [true, true, false, false]  => 10 + 14,  // empty to left and right (column)
-                    [false, false, true, false] => 1  + 14,  // empty above (normal)
-                    [false, false, false, true] => 46,       // empty below (upsidedown of normal)
-                    [false, false, true, true]  => 5  + 14,  // empty above and below (ceiling ig)
-
-                    [true, false, true, false]  => 2  + 14,  // empty to left and above (corner)
-                    [true, false, false, true]  => 4  + 14,  // empty to left and below (corner)
-                    [true, false, true, true]   => 13 + 14,  // empty to left above and below (cap facing left)
-
-                    [false, true, false, true]  => 9  + 14,  // empty to right and below (corner)
-                    [false, true, true, false]  => 3  + 14,  // empty to right and above (corner)
-                    [false, true, true, true]   => 6  + 14,  // empty to right above and below (cap facing right)
-
-                    [true, true, true, false]   => 11 + 14,  // empty to left, right and above (cap facing up)
-                    [true, true, false, true]   => 12 + 14,  // empty to left, right and below (cap facing down)
-                    [true, true, true, true]    => 14 + 14,  // surrounded
-
-                    _ => 29,  // stone
-                };
-                *self.get_tile_mut(x, y, layer) = new_tile;
-            }
-
-            if STONE_IDS.contains(&tile) {  // stone
-                let tiles_outside = [
-                    self.get_tile(x.saturating_sub(1), y, layer),
-                    self.get_tile((x + 1).min(self.get_map_width() - 1), y, layer),
-                    self.get_tile(x, y.saturating_sub(1), layer),
-                    self.get_tile(x, (y + 1).min(self.get_map_height() - 1), layer),
-                ];
-                let tile_edges = [
-                    tiles_outside[0] == 0,
-                    tiles_outside[1] == 0,
-                    tiles_outside[2] == 0,
-                    tiles_outside[3] == 0,
-                ];
-                // left right up down
-                let new_tile = match tile_edges {
-                    [true, false, false, false] => 7 + 29,  // empty to left (wall facing to left)
-                    [false, true, false, false] => 8 + 29,  // empty to right (wall facing to right)
-                    [true, true, false, false]  => 10 + 29,  // empty to left and right (column)
-                    [false, false, true, false] => 1 + 29,  // empty above (normal)
-                    [false, false, false, true] => 45,  // empty below (upsidedown of normal)
-                    [false, false, true, true]  => 5 + 29,  // empty above and below (ceiling ig)
-
-                    [true, false, true, false]  => 2 + 29,  // empty to left and above (corner)
-                    [true, false, false, true]  => 4 + 29,  // empty to left and below (corner)
-                    [true, false, true, true]   => 13 + 29,  // empty to left above and below (cap facing left)
-
-                    [false, true, false, true]  => 9 + 29,  // empty to right and below (corner)
-                    [false, true, true, false]  => 3 + 29,  // empty to right and above (corner)
-                    [false, true, true, true]   => 6 + 29,  // empty to right above and below (cap facing right)
-
-                    [true, true, true, false]   => 11 + 29,  // empty to left, right and above (cap facing up)
-                    [true, true, false, true]   => 12 + 29,  // empty to left, right and below (cap facing down)
-                    [true, true, true, true]    => 14 + 29,  // surrounded
-                    
-                    _ => 44,  // stone
-                };
-                *self.get_tile_mut(x, y, layer) = new_tile;
-            }
+            WorldGenerator::update_edge_tiles(tile, &[GRASS_IDS], self, [
+                7, 8, 10, 1, 47, 5, 2, 4, 13, 9, 3, 6, 11, 12, 14, 29
+            ], x, y, 0);
+            WorldGenerator::update_edge_tiles(tile, &[DIRT_IDS], self, [
+                7 + 14, 8 + 14, 10 + 14, 1 + 14, 46, 5 + 14, 2 + 14, 4 + 14, 13 + 14, 9 + 14, 3 + 14, 6 + 14, 11 + 14, 12 + 14, 14 + 14, 29
+            ], x, y, 0);
+            WorldGenerator::update_edge_tiles(tile, &[STONE_IDS], self, [
+                7 + 29, 8 + 29, 10 + 29, 1 + 29, 45, 5 + 29, 2 + 29, 4 + 29, 13 + 29, 9 + 29, 3 + 29, 6 + 29, 11 + 29, 12 + 29, 14 + 29, 44
+            ], x, y, 0);
+            
+            WorldGenerator::update_edge_tiles(tile, &[SNOW_IDS], self, [
+                7 + 136, 8 + 136, 10 + 136, 1 + 136, 135, 5 + 136, 2 + 136, 4 + 136, 13 + 136, 9 + 136, 3 + 136, 6 + 136, 11 + 136, 12 + 136, 14 + 136, 29
+            ], x, y, 0);
+            WorldGenerator::update_edge_tiles(tile, &[ICE_IDS], self, [
+                7 + 117, 8 + 117, 10 + 117, 1 + 117, 136, 5 + 117, 2 + 117, 4 + 117, 13 + 117, 9 + 117, 3 + 117, 6 + 117, 11 + 117, 12 + 117, 14 + 117, 132
+            ], x, y, 0);
+            WorldGenerator::update_edge_tiles(tile, &[SAND_IDS], self, [
+                7 + 88, 8 + 88, 10 + 88, 1 + 88, 134, 5 + 88, 2 + 88, 4 + 88, 13 + 88, 9 + 88, 3 + 88, 6 + 88, 11 + 88, 12 + 88, 14 + 88, 117
+            ], x, y, 0);
+            WorldGenerator::update_edge_tiles(tile, &[SAND_STONE_IDS], self, [
+                7 + 102, 8 + 102, 10 + 102, 1 + 102, 133, 5 + 102, 2 + 102, 4 + 102, 13 + 102, 9 + 102, 3 + 102, 6 + 102, 11 + 102, 12 + 102, 14 + 102, 117
+            ], x, y, 0);
         } Ok(())
     }
     
@@ -343,8 +263,8 @@ impl TileMap {
         let start_y = ((camera_transform.y / 8.) as isize - (visible_height as isize / 2)).max(0) as usize;
         let end_x = (start_x + visible_width).min(self.get_map_width());
         let end_y = (start_y + visible_height).min(self.get_map_height());
-        let cell_offset_x = (fract(camera_transform.x / 8.) * 8.) as f32 / camera_transform.zoom;
-        let cell_offset_y = (fract(camera_transform.y / 8.) * 8.) as f32 / camera_transform.zoom;
+        let cell_offset_x = fract(camera_transform.x / 8.) * 8.0 / camera_transform.zoom;
+        let cell_offset_y = fract(camera_transform.y / 8.) * 8.0 / camera_transform.zoom;
 
         // generating the visible slice
         // the 1024 * 1024 is technically the max size as mandated by the gpu buffers
@@ -357,7 +277,7 @@ impl TileMap {
                 zoom: camera_transform.zoom,
             }, (0, 0));
         }
-
+        
         let mut visible_tiles: Vec<[u64; 4]> = Vec::with_capacity(((end_y - start_y) * (end_x - start_x)).max(0).min(1024 * 1024));
         for y in start_y..end_y {
             for x in start_x..end_x {
@@ -379,7 +299,7 @@ impl TileMap {
                 // computing the light contribution from the sky
                 let mut sky_light = 0;
                 for x_offset in (-10isize)..10isize {
-                    let sky_light_new = 10usize.saturating_sub(y.saturating_sub(self.sky_light[(x as isize + x_offset).max(0) as usize] as usize));
+                    let sky_light_new = 10usize.saturating_sub(y.saturating_sub(self.sky_light[((x as isize + x_offset).max(0) as usize).min(self.get_map_width() - 1)] as usize));
                     // the pow is to create an easing curve to make it less diamond shaped, but idk how I feel about it. But, for now, it works
                     let sky_light_new = ((sky_light_new as f32 / 10.0 * 255.0) as u8).saturating_sub(((x_offset as f32 * 0.1).powi(2) * 255.0) as u8);
                     sky_light = sky_light.max(sky_light_new);

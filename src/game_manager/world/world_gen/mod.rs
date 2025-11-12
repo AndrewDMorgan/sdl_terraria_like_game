@@ -1,6 +1,7 @@
 use fastnoise_lite::{FastNoiseLite, NoiseType, FractalType};
+use rand::random_range;
 
-use crate::{game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, STONE_IDS, TILE_LIGHTS, TileMapError}, logging::logging::LoggingError};
+use crate::{game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, ICE_IDS, SAND_IDS, SAND_STONE_IDS, SNOW_IDS, SOLID_TILES, STONE_IDS, TILE_LIGHTS, TileMapError}, logging::logging::LoggingError};
 
 
 #[derive(bincode::Encode, bincode::Decode)]
@@ -114,7 +115,12 @@ lazy_static::lazy_static! {
                     noise.set_fractal_gain(Some(0.5));
                     noise
                 },
-                tile_mapping: |tile| { tile }
+                tile_mapping: |tile| { match tile {
+                    1 => 89,  // grass
+                    29 => 89,  // dirt
+                    44 => 103,  // stone
+                    _ => tile,
+                } }
             },
         },
         BiomInfo {
@@ -188,16 +194,25 @@ lazy_static::lazy_static! {
                     noise.set_fractal_gain(Some(0.5));
                     noise
                 },
-                tile_mapping: |tile| { tile }
+                tile_mapping: |tile| { match tile {
+                    1 => 137,  // grass
+                    29 => 137,  // dirt (the grass will become dirt, but also prevent the dirt from turning to actual grass)
+                    44 => 118,  // stone
+                    _ => tile,
+                } }
             },
         },
     ];
 }
 
 fn get_biom(biom: f32) -> (&'static BiomInfo, &'static BiomInfo, f32) {
-    let biom_ident = ((biom * 0.5 + 0.5) * BIOM_PARAMETERS.len() as f32);
+    let biom_ident = (biom * 0.5 + 0.5) * BIOM_PARAMETERS.len() as f32;
     let (extra_biom, weight) = if biom_ident - biom_ident.floor() > 0.5 {
-        (&BIOM_PARAMETERS[(biom_ident as usize + 1).min(BIOM_PARAMETERS.len() - 1)], (biom_ident - biom_ident.floor() - 0.5))
+        if biom_ident as usize + 1 >= BIOM_PARAMETERS.len() {
+            (&BIOM_PARAMETERS[BIOM_PARAMETERS.len() - 1], 0.5)
+        } else {
+            (&BIOM_PARAMETERS[(biom_ident as usize + 1).min(BIOM_PARAMETERS.len() - 1)], (biom_ident - biom_ident.floor() - 0.5))
+        }
     } else {
         (&BIOM_PARAMETERS[(biom_ident as usize).saturating_sub(1)], 0.5 - (biom_ident - biom_ident.floor()))
     };
@@ -237,12 +252,53 @@ impl WorldGenerator {
         }
     }
 
+    pub fn update_edge_tiles(tile: u32, tile_type: &[&'static [u32]], tile_map: &mut crate::game_manager::world::tile_map::TileMap, tile_set: [u32; 16], x: usize, y: usize, layer: usize) {
+        if tile_type.iter().any(|set| set.contains(&tile)) {  // stone
+            let tiles_outside = [
+                tile_map.get_tile(x.saturating_sub(1), y, layer),
+                tile_map.get_tile((x + 1).min(tile_map.get_map_width() - 1), y, layer),
+                tile_map.get_tile(x, y.saturating_sub(1), layer),
+                tile_map.get_tile(x, (y + 1).min(tile_map.get_map_height() - 1), layer),
+            ];
+            let tile_edges = [
+                !SOLID_TILES.iter().any(|t| t.contains(&&tiles_outside[0])),
+                !SOLID_TILES.iter().any(|t| t.contains(&&tiles_outside[1])),
+                !SOLID_TILES.iter().any(|t| t.contains(&&tiles_outside[2])),
+                !SOLID_TILES.iter().any(|t| t.contains(&&tiles_outside[3])),
+            ];
+            // left right up down
+            let new_tile = match tile_edges {
+                [true, false, false, false] => tile_set[0],  // empty to left (wall facing to left)
+                [false, true, false, false] => tile_set[1],  // empty to right (wall facing to right)
+                [true, true, false, false]  => tile_set[2],  // empty to left and right (column)
+                [false, false, true, false] => tile_set[3],  // empty above (normal)
+                [false, false, false, true] => tile_set[4],  // empty below (upsidedown of normal)
+                [false, false, true, true]  => tile_set[5],  // empty above and below (ceiling ig)
+
+                [true, false, true, false]  => tile_set[6],  // empty to left and above (corner)
+                [true, false, false, true]  => tile_set[7],  // empty to left and below (corner)
+                [true, false, true, true]   => tile_set[8],  // empty to left above and below (cap facing left)
+
+                [false, true, false, true]  => tile_set[9],  // empty to right and below (corner)
+                [false, true, true, false]  => tile_set[10],  // empty to right and above (corner)
+                [false, true, true, true]   => tile_set[11],  // empty to right above and below (cap facing right)
+
+                [true, true, true, false]   => tile_set[12],  // empty to left, right and above (cap facing up)
+                [true, true, false, true]   => tile_set[13],  // empty to left, right and below (cap facing down)
+                [true, true, true, true]    => tile_set[14],  // surrounded
+
+                _ => tile_set[15],
+            };
+            *tile_map.get_tile_mut(x, y, layer) = new_tile;
+        }
+    }
+    
     // todo! add perlin noise and stuff
     pub fn generate_tile_map(&self, tile_map: &mut crate::game_manager::world::tile_map::TileMap) -> Result<(), TileMapError> {
         let mut biom_noise = FastNoiseLite::new();
         biom_noise.set_seed(Some(1234));
         biom_noise.set_noise_type(Some(NoiseType::Perlin));
-        biom_noise.set_frequency(Some(0.0025));
+        biom_noise.set_frequency(Some(0.00075));
         for x in 0..tile_map.get_map_width() {
             let biom = biom_noise.get_noise_2d(x as f32, 256.0);
             let dirt_depth = ((sample_land_noise(x as f32, 25.0, biom) * 0.5 + 0.5) * 10.0) as usize;
@@ -262,15 +318,31 @@ impl WorldGenerator {
                 if in_sky {
                     tile_map.sky_light[x] = y as u32;
                 }
+                let (main_biom, blending_to_biom, weight) = get_biom(biom);
+                let biom_height = (sample_land_noise(x as f32, y as f32 - 256.0, biom) * 0.5 + 0.5) * 50.0 + 145.0;
+                let in_biom = y < biom_height as usize;
+                let rng_state = random_range(0.15..1.0);
+                let current_biom = if rng_state < weight*weight {  // may need to be a less than instead?
+                    main_biom
+                } else { blending_to_biom };
                 if y == height {
                     in_sky = false;
-                    *tile_map.get_tile_mut(x, y, 0) = 1;
+                    *tile_map.get_tile_mut(x, y, 0) = match in_biom {
+                        true => (current_biom.generation_parameters.tile_mapping)(1),
+                        false => 1,
+                    };
                 } else if y > height && y <= height + dirt_depth {
                     in_sky = false;
-                    *tile_map.get_tile_mut(x, y, 0) = 29;  // dirt
+                    *tile_map.get_tile_mut(x, y, 0) = match in_biom {
+                        true => (current_biom.generation_parameters.tile_mapping)(29),
+                        false => 29,
+                    };  // dirt
                 } else if y > height + dirt_depth {
                     in_sky = false;
-                    *tile_map.get_tile_mut(x, y, 0) = 44; // stone
+                    *tile_map.get_tile_mut(x, y, 0) = match in_biom {
+                        true => (current_biom.generation_parameters.tile_mapping)(44),
+                        false => 44,
+                    }; // stone
                 }
             }
         }
@@ -280,84 +352,25 @@ impl WorldGenerator {
         for x in 0..tile_map.get_map_width() {
             for y in 0..tile_map.get_map_height() {
                 let tile = tile_map.get_tile(x, y, 0);
-                if GRASS_IDS.contains(&tile) || DIRT_IDS.contains(&tile) {  // grass
-                    let tiles_outside = [
-                        tile_map.get_tile(x.saturating_sub(1), y, 0),
-                        tile_map.get_tile((x + 1).min(tile_map.get_map_width() - 1), y, 0),
-                        tile_map.get_tile(x, y.saturating_sub(1), 0),
-                        tile_map.get_tile(x, (y + 1).min(tile_map.get_map_height() - 1), 0),
-                    ];
-                    let tile_edges = [
-                        tiles_outside[0] == 0,
-                        tiles_outside[1] == 0,
-                        tiles_outside[2] == 0,
-                        tiles_outside[3] == 0,
-                    ];
-                    // left right up down
-                    let new_tile = match tile_edges {
-                        [true, false, false, false] => 7,  // empty to left (wall facing to left)
-                        [false, true, false, false] => 8,  // empty to right (wall facing to right)
-                        [true, true, false, false]  => 10,  // empty to left and right (column)
-                        [false, false, true, false] => 1,  // empty above (normal)
-                        [false, false, false, true] => 47,  // empty below (upsidedown of normal)
-                        [false, false, true, true]  => 5,  // empty above and below (ceiling ig)
+                Self::update_edge_tiles(tile, &[DIRT_IDS, GRASS_IDS], tile_map, [
+                    7, 8, 10, 1, 47, 5, 2, 4, 13, 9, 3, 6, 11, 12, 14, 29
+                ], x, y, 0);
+                Self::update_edge_tiles(tile, &[STONE_IDS], tile_map, [
+                    7 + 29, 8 + 29, 10 + 29, 1 + 29, 45, 5 + 29, 2 + 29, 4 + 29, 13 + 29, 9 + 29, 3 + 29, 6 + 29, 11 + 29, 12 + 29, 14 + 29, 44
+                ], x, y, 0);
 
-                        [true, false, true, false]  => 2,  // empty to left and above (corner)
-                        [true, false, false, true]  => 4,  // empty to left and below (corner)
-                        [true, false, true, true]   => 13,  // empty to left above and below (cap facing left)
-
-                        [false, true, false, true]  => 9,  // empty to right and below (corner)
-                        [false, true, true, false]  => 3,  // empty to right and above (corner)
-                        [false, true, true, true]   => 6,  // empty to right above and below (cap facing right)
-
-                        [true, true, true, false]   => 11,  // empty to left, right and above (cap facing up)
-                        [true, true, false, true]   => 12,  // empty to left, right and below (cap facing down)
-                        [true, true, true, true]    => 14,  // surrounded
-
-                        _ => 29,  // dirt
-                    };
-                    *tile_map.get_tile_mut(x, y, 0) = new_tile;
-                }
-
-
-                if STONE_IDS.contains(&tile) {  // stone
-                    let tiles_outside = [
-                        tile_map.get_tile(x.saturating_sub(1), y, 0),
-                        tile_map.get_tile((x + 1).min(tile_map.get_map_width() - 1), y, 0),
-                        tile_map.get_tile(x, y.saturating_sub(1), 0),
-                        tile_map.get_tile(x, (y + 1).min(tile_map.get_map_height() - 1), 0),
-                    ];
-                    let tile_edges = [
-                        tiles_outside[0] == 0,
-                        tiles_outside[1] == 0,
-                        tiles_outside[2] == 0,
-                        tiles_outside[3] == 0,
-                    ];
-                    // left right up down
-                    let new_tile = match tile_edges {
-                        [true, false, false, false] => 7 + 29,  // empty to left (wall facing to left)
-                        [false, true, false, false] => 8 + 29,  // empty to right (wall facing to right)
-                        [true, true, false, false]  => 10 + 29,  // empty to left and right (column)
-                        [false, false, true, false] => 1 + 29,  // empty above (normal)
-                        [false, false, false, true] => 45,  // empty below (upsidedown of normal)
-                        [false, false, true, true]  => 5 + 29,  // empty above and below (ceiling ig)
-
-                        [true, false, true, false]  => 2 + 29,  // empty to left and above (corner)
-                        [true, false, false, true]  => 4 + 29,  // empty to left and below (corner)
-                        [true, false, true, true]   => 13 + 29,  // empty to left above and below (cap facing left)
-
-                        [false, true, false, true]  => 9 + 29,  // empty to right and below (corner)
-                        [false, true, true, false]  => 3 + 29,  // empty to right and above (corner)
-                        [false, true, true, true]   => 6 + 29,  // empty to right above and below (cap facing right)
-
-                        [true, true, true, false]   => 11 + 29,  // empty to left, right and above (cap facing up)
-                        [true, true, false, true]   => 12 + 29,  // empty to left, right and below (cap facing down)
-                        [true, true, true, true]    => 14 + 29,  // surrounded
-
-                        _ => 44,  // stone
-                    };
-                    *tile_map.get_tile_mut(x, y, 0) = new_tile;
-                }
+                Self::update_edge_tiles(tile, &[SNOW_IDS], tile_map, [
+                    7 + 136, 8 + 136, 10 + 136, 1 + 136, 135, 5 + 136, 2 + 136, 4 + 136, 13 + 136, 9 + 136, 3 + 136, 6 + 136, 11 + 136, 12 + 136, 14 + 136, 29
+                ], x, y, 0);
+                Self::update_edge_tiles(tile, &[ICE_IDS], tile_map, [
+                    7 + 117, 8 + 117, 10 + 117, 1 + 117, 136, 5 + 117, 2 + 117, 4 + 117, 13 + 117, 9 + 117, 3 + 117, 6 + 117, 11 + 117, 12 + 117, 14 + 117, 132
+                ], x, y, 0);
+                Self::update_edge_tiles(tile, &[SAND_IDS], tile_map, [
+                    7 + 88, 8 + 88, 10 + 88, 1 + 88, 134, 5 + 88, 2 + 88, 4 + 88, 13 + 88, 9 + 88, 3 + 88, 6 + 88, 11 + 88, 12 + 88, 14 + 88, 117
+                ], x, y, 0);
+                Self::update_edge_tiles(tile, &[SAND_STONE_IDS], tile_map, [
+                    7 + 102, 8 + 102, 10 + 102, 1 + 102, 133, 5 + 102, 2 + 102, 4 + 102, 13 + 102, 9 + 102, 3 + 102, 6 + 102, 11 + 102, 12 + 102, 14 + 102, 117
+                ], x, y, 0);
             }
         }
 

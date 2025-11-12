@@ -36,7 +36,7 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     //     *temporary apparently means permanent? Either way, it's here to stay
     let mut game_manager = GameStateManager::new(logs)?;  // handles everything, making it easier to have multiple menue states and
     // current save: Some("testing_world".to_string())
-    game_manager.start_game(None, logs, GAME_VERSION)?;
+    //game_manager.start_game(None, logs, GAME_VERSION)?;
     
     // Initialize SDL2
     let sdl = sdl2::init()?;
@@ -86,7 +86,14 @@ pub fn start(logs: &mut Logs) -> Result<(), String> {
     'running: loop {
         // handling events
         timer.start_new_frame();
-        let status = game_manager.handle_events(&mut event_handler, &mut event_pump, &mut timer, logs);
+        let status = game_manager.handle_events(
+            &mut event_handler,
+            &mut event_pump,
+            &mut timer,
+            logs,
+            window_surface.output_size()?,
+            GAME_VERSION
+        )?;
         match status {
             event_handler::Status::Continue => {},
             event_handler::Status::Quit => break 'running,
