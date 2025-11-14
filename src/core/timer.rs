@@ -33,7 +33,7 @@ impl Timer {
     /// Updates the frame data, including the delta time and frame count.
     pub fn update_frame_data(&mut self) {
         let current_time = self.start.elapsed().as_secs_f64();
-        self.delta_time = current_time - self.frame_start;
+        self.delta_time = (current_time - self.frame_start).min(0.1);
         self.frame += 1;
 
         self.accumulative_time += self.delta_time;

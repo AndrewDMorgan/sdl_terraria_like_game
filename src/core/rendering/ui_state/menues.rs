@@ -173,7 +173,7 @@ impl GameStateManager {
                 255u32 | (255u32 << 8) | (255u32 << 16)
             );
         }
-
+        
         if let Some(creator) = self.creator_popup.as_ref() {
             creator.ui_element.render(pixels, window_size, pitch, &mut self.game_world_name)?;
         }
@@ -226,7 +226,8 @@ impl GameStateManager {
                 if let Some(code) = sdl2::keyboard::Keycode::from_name(&char.to_string()) {
                     if event_handler.keys_released.contains(&code) {
                         if self.game_world_name.is_none() { self.game_world_name.replace(String::new()); }
-                        let char = if event_handler.mods_released.contains(&sdl2::keyboard::Mod::LSHIFTMOD) || event_handler.mods_released.contains(&sdl2::keyboard::Mod::RSHIFTMOD) {
+                        let char = if event_handler.mods_released.contains(&sdl2::keyboard::Mod::LSHIFTMOD) || event_handler.mods_released.contains(&sdl2::keyboard::Mod::RSHIFTMOD) ||
+                                            event_handler.mods_pressed .contains(&sdl2::keyboard::Mod::LSHIFTMOD) || event_handler.mods_pressed .contains(&sdl2::keyboard::Mod::RSHIFTMOD) {
                             match char {
                                 '-' => '_',
                                 '1' => '!',

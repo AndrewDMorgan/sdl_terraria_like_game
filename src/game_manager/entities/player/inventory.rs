@@ -248,7 +248,7 @@ impl Inventory {
             }
             i += 1;
         }
-
+        
         let raw_keys_down = event_handler.keys_pressed.iter().map(|k| **k).collect::<Vec<_>>();
         if KeyBindings::check_true(&key_bindings.inventory, &raw_keys_down, &event_handler.mods_pressed) {
             // Checking if the inventory is or isn't open

@@ -6,7 +6,7 @@ use crate::{game_manager::world::tile_map::{DIRT_IDS, GRASS_IDS, ICE_IDS, SAND_I
 
 #[derive(bincode::Encode, bincode::Decode)]
 pub struct WorldGenerator {
-    //
+    seed: f32
 }
 
 pub enum Biom {
@@ -224,31 +224,31 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a * t + b * (1.0 - t)
 }
 
-fn sample_land_noise(x: f32, y: f32, biom: f32) -> f32 {
+fn sample_land_noise(x: f32, y: f32, biom: f32, seed: f32) -> f32 {
     let (main_biom, blending_to_biom, weight) = get_biom(biom);
-    let noise_main = main_biom.generation_parameters.land_noise.get_noise_2d(x, y);
-    let noise_blending = blending_to_biom.generation_parameters.land_noise.get_noise_2d(x, y);
+    let noise_main = main_biom.generation_parameters.land_noise.get_noise_3d(x, y, seed);
+    let noise_blending = blending_to_biom.generation_parameters.land_noise.get_noise_3d(x, y, seed);
     lerp(noise_main, noise_blending, weight)
 }
 
-fn sample_cave_noise(x: f32, y: f32, biom: f32) -> f32 {
+fn sample_cave_noise(x: f32, y: f32, biom: f32, seed: f32) -> f32 {
     let (main_biom, blending_to_biom, weight) = get_biom(biom);
-    let noise_main = main_biom.generation_parameters.cave_noise.get_noise_2d(x, y);
-    let noise_blending = blending_to_biom.generation_parameters.cave_noise.get_noise_2d(x, y);
+    let noise_main = main_biom.generation_parameters.cave_noise.get_noise_3d(x, y, seed);
+    let noise_blending = blending_to_biom.generation_parameters.cave_noise.get_noise_3d(x, y, seed);
     lerp(noise_main, noise_blending, weight)
 }
 
-fn sample_cave_threshold_noise(x: f32, y: f32, biom: f32) -> f32 {
+fn sample_cave_threshold_noise(x: f32, y: f32, biom: f32, seed: f32) -> f32 {
     let (main_biom, blending_to_biom, weight) = get_biom(biom);
-    let noise_main = main_biom.generation_parameters.cave_threshold_noise.0.get_noise_2d(x, y) + main_biom.generation_parameters.cave_threshold_noise.1;
-    let noise_blending = blending_to_biom.generation_parameters.cave_threshold_noise.0.get_noise_2d(x, y) + blending_to_biom.generation_parameters.cave_threshold_noise.1;
+    let noise_main = main_biom.generation_parameters.cave_threshold_noise.0.get_noise_3d(x, y, seed) + main_biom.generation_parameters.cave_threshold_noise.1;
+    let noise_blending = blending_to_biom.generation_parameters.cave_threshold_noise.0.get_noise_3d(x, y, seed) + blending_to_biom.generation_parameters.cave_threshold_noise.1;
     lerp(noise_main, noise_blending, weight)
 }
 
 impl WorldGenerator {
-    pub fn new() -> Self {
+    pub fn new(seed: f32) -> Self {
         WorldGenerator {
-            //
+            seed
         }
     }
 
@@ -296,19 +296,19 @@ impl WorldGenerator {
     // todo! add perlin noise and stuff
     pub fn generate_tile_map(&self, tile_map: &mut crate::game_manager::world::tile_map::TileMap) -> Result<(), TileMapError> {
         let mut biom_noise = FastNoiseLite::new();
-        biom_noise.set_seed(Some(1234));
+        biom_noise.set_seed(Some(1234 + self.seed as i32));
         biom_noise.set_noise_type(Some(NoiseType::Perlin));
         biom_noise.set_frequency(Some(0.00075));
         for x in 0..tile_map.get_map_width() {
             let biom = biom_noise.get_noise_2d(x as f32, 256.0);
-            let dirt_depth = ((sample_land_noise(x as f32, 25.0, biom) * 0.5 + 0.5) * 10.0) as usize;
+            let dirt_depth = ((sample_land_noise(x as f32, 25.0, biom, self.seed) * 0.5 + 0.5) * 10.0) as usize;
             let mut in_sky = true;
 
             for y in 0..tile_map.get_map_height() {
-                let height = ((sample_land_noise(x as f32, y as f32, biom) * 0.5 + 0.5) * 50.0 + 100.0) as usize;
-                let cave_noise = sample_cave_noise(x as f32, y as f32, biom);
+                let height = ((sample_land_noise(x as f32, y as f32, biom, self.seed) * 0.5 + 0.5) * 50.0 + 100.0) as usize;
+                let cave_noise = sample_cave_noise(x as f32, y as f32, biom, self.seed);
 
-                if cave_noise > sample_cave_threshold_noise(x as f32, y as f32, biom) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
+                if cave_noise > sample_cave_threshold_noise(x as f32, y as f32, biom, self.seed) + 1.5 + ((y as f32 - height as f32) * -0.1).max(-0.75) {
                     if in_sky {
                         tile_map.sky_light[x] = y as u32;
                     }
@@ -319,7 +319,7 @@ impl WorldGenerator {
                     tile_map.sky_light[x] = y as u32;
                 }
                 let (main_biom, blending_to_biom, weight) = get_biom(biom);
-                let biom_height = (sample_land_noise(x as f32, y as f32 - 256.0, biom) * 0.5 + 0.5) * 50.0 + 145.0;
+                let biom_height = (sample_land_noise(x as f32, y as f32 - 256.0, biom, self.seed) * 0.5 + 0.5) * 50.0 + 145.0;
                 let in_biom = y < biom_height as usize;
                 let rng_state = random_range(0.15..1.0);
                 let current_biom = if rng_state < weight*weight {  // may need to be a less than instead?

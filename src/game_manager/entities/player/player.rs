@@ -72,8 +72,8 @@ impl Player {
     pub fn new() -> Self {
         Player {
             camera: CameraTransform {
-                x: 0.0,
-                y: 135.0 * 8.0,
+                x: 50.0,
+                y: 115.0 * 8.0,
                 zoom: 0.2,
             },
             entity: Entity {
@@ -81,26 +81,33 @@ impl Player {
                     offset: (-12.0, -9.0),
                     size: (8.0, 14.0),
                 }, Animator::new(vec![vec![0]], vec![0.0])),
-                position: (0.0, 115.0 * 8.0),  // this should be on the edge of the map, but it's not, so that's an issue that needs addressing and probably relates to the zooming bug
+                position: (50.0, 115.0 * 8.0),  // this should be on the edge of the map, but it's not, so that's an issue that needs addressing and probably relates to the zooming bug
+                velocity: (0.0, 0.0),
             },
             player_data: PlayerData {
                 inventory: Inventory::new(),
             },
             key_bindings: KeyBindings {
-                inventory: vec![KeyBind::Key(*sdl2::keyboard::Keycode::E)],
+                inventory: vec![KeyBind::Key(*sdl2::keyboard::Keycode::E), KeyBind::Key(*sdl2::keyboard::Keycode::TAB)],
                 left: vec![KeyBind::Key(*sdl2::keyboard::Keycode::A)],
                 right: vec![KeyBind::Key(*sdl2::keyboard::Keycode::D)],
-                jump: vec![KeyBind::Key(*sdl2::keyboard::Keycode::W)],
+                jump: vec![KeyBind::Key(*sdl2::keyboard::Keycode::W), KeyBind::Key(*sdl2::keyboard::Keycode::SPACE)],
                 down: vec![KeyBind::Mod(sdl2::keyboard::Mod::LSHIFTMOD.bits()), KeyBind::Key(*sdl2::keyboard::Keycode::S)],
             },
         }
     }
 
-    pub fn render_ui(&mut self, buffer: &mut [u8], buffer_size: (u32, u32), player_ui_manager: &mut PlayerUiManager, pitch: usize) -> Result<(), crate::core::rendering::ui::UiError> {
+    pub fn render_ui(
+        &mut self,
+        buffer: &mut [u8],
+        buffer_size: (u32, u32),
+        player_ui_manager: &mut PlayerUiManager,
+        pitch: usize
+    ) -> Result<(), crate::core::rendering::ui::UiError> {
         player_ui_manager.render_ui(buffer, buffer_size, &mut self.player_data, pitch)
     }
 
-    fn move_player(&mut self, delta_x: f32, delta_y: f32, tile_map: &tile_map::TileMap) {
+    fn move_player(&mut self, delta_x: f32, delta_y: f32, tile_map: &tile_map::TileMap) -> bool {
         // trying to do a smoother collision detection by splitting the movement into many steps
         let hitbox = self.entity.sprite.get_hitbox();
         for _ in 0..100 {
@@ -111,7 +118,7 @@ impl Player {
                 if delta_x != 0.0 && delta_y.abs() <= 0.01 {
                     let mut jumped = false;
                     // trying to jump up the block if it's 1 high
-                    for y in 1..=16 {
+                    for y in 1..=18 {
                         let test_y = new_y - y as f32 * 0.5;
                         if !tile_map.check_aabb_collision(new_x + hitbox.offset.0 as f32, test_y + hitbox.offset.1 as f32, hitbox.size.0 as f32, hitbox.size.1 as f32) {
                             self.entity.position.0 = new_x;
@@ -120,13 +127,13 @@ impl Player {
                             break;
                         }
                     }
-                    if !jumped { break; }
-                } else { break; }
+                    if !jumped { return true; }
+                } else { return true; }
             } else {
                 self.entity.position.0 = new_x;
                 self.entity.position.1 = new_y;
             }
-        }
+        } false
     }
 
     pub fn update_key_events(
@@ -151,20 +158,38 @@ impl Player {
             entity_manager,
             &self.entity.position,
         )?;
-
+        
+        self.entity.velocity.0 = lerp(self.entity.velocity.0, 0.0, 50.0 * timer.delta_time as f32);
+        //self.entity.velocity.1 = lerp(self.entity.velocity.1, 0.0, 50.0 * timer.delta_time as f32);
         let raw_keys_held = event_handler.keys_held.iter().map(|k| **k).collect::<Vec<_>>();
         if KeyBindings::check_true(&self.key_bindings.right, &raw_keys_held, &event_handler.mods_held) {
-            self.move_player(200.0 * timer.delta_time as f32, 0.0, tile_map);
+            self.entity.velocity.0 = lerp(self.entity.velocity.0, 300.0, 50.0 * timer.delta_time as f32);
         }
         if KeyBindings::check_true(&self.key_bindings.left, &raw_keys_held, &event_handler.mods_held) {
-            self.move_player(-200.0 * timer.delta_time as f32, 0.0, tile_map);
+            self.entity.velocity.0 = lerp(self.entity.velocity.0, -300.0, 50.0 * timer.delta_time as f32);
         }
         if KeyBindings::check_true(&self.key_bindings.down, &raw_keys_held, &event_handler.mods_held) {
-            self.move_player(0.0, 200.0 * timer.delta_time as f32, tile_map);
+            self.entity.velocity.1 = lerp(self.entity.velocity.1, 300.0, 50.0 * timer.delta_time as f32);
         }
         if KeyBindings::check_true(&self.key_bindings.jump, &raw_keys_held, &event_handler.mods_held) {
-            self.move_player(0.0, -200.0 * timer.delta_time as f32, tile_map);
+            if self.entity.velocity.1.abs() < 0.1 {  // only allow jumping if the player is on the ground
+                self.entity.velocity.1 = -400.0;  // todo! actually check that there is a block beneath the player
+            }
+            //self.entity.velocity.1 = lerp(self.entity.velocity.1, -300.0, 50.0 * timer.delta_time as f32);
         }
+        self.move_player(
+            timer.delta_time as f32 * self.entity.velocity.0,
+            0.0,
+            tile_map
+        );
+        let collided = self.move_player(
+            0.0,
+            timer.delta_time as f32 * self.entity.velocity.1,
+            tile_map
+        );
+        if !collided {  // gravity
+            self.entity.velocity.1 = (self.entity.velocity.1 + 1300.0 * timer.delta_time as f32).min(500.0);
+        } else { self.entity.velocity.1 = 0.0; }
 
         if event_handler.keys_held.contains(&sdl2::keyboard::Keycode::Z) {
             if event_handler.mods_held.contains(&sdl2::keyboard::Mod::LALTMOD) {

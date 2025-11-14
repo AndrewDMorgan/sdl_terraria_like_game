@@ -235,6 +235,16 @@ kernel void ComputeShader (
             text_color.z * 0.00392156862
         );
     }
+    
+    // dark areas are less saturated
+    float brightness = 0.2126*color.x+ 0.7152*color.y + 0.0722*color.z;
+    float light_brightness = 0.2126*light_color.x+ 0.7152*light_color.y + 0.0722*light_color.z;
+    float saturation = light_brightness * light_brightness;
+    color = float3(
+        color.x * saturation + brightness * (1.0 - saturation),
+        color.y * saturation + brightness * (1.0 - saturation),
+        color.z * saturation + brightness * (1.0 - saturation)
+    );
 
     uint index = gid.y * pitch + gid.x * 3;
 

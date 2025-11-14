@@ -6,6 +6,7 @@ pub struct Entity<T>
 {
     pub sprite: Sprite<T>,
     pub position: (f32, f32),
+    pub velocity: (f32, f32),
 }
 
 impl<T> Entity<T>
@@ -15,6 +16,7 @@ impl<T> Entity<T>
         Entity {
             sprite,
             position,
+            velocity: (0.0, 0.0),
         }
     }
 }

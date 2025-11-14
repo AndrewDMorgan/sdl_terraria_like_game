@@ -113,7 +113,7 @@ impl Game {
     }
 
     pub fn new(logs: &mut Logs, font_atlas: Rc<Vec<[u32; 256]>>) -> Result<Self, GameError> {
-        let world_generator = WorldGenerator::new();
+        let world_generator = WorldGenerator::new(123456.23456);
         let mut tile_map_manager = TileMapManager::new();
         // todo! temporary for now; eventually a world creation menue will be added
         tile_map_manager.replace_tile_map(
